@@ -1,4 +1,4 @@
-const DEVOS_FRONTEND_VERSION = "2.5.7";
+const DEVOS_FRONTEND_VERSION = "2.5.12";
 const API = '';
 let currentGeometry = null;
 let sitePlan = null;
@@ -32,7 +32,7 @@ function updateOptimizationModeUI(){
   if($('optimizeYieldBtn')) $('optimizeYieldBtn').disabled=!on || !selectedAlternative || optimizerRunning;
   if($('yieldStatus') && !optimizerRunning){
     if(!on){ $('yieldStatus').textContent='Nonaktif • skenario awal'; $('yieldStatus').className='validation neutral'; }
-    else if(selectedAlternative?.stats?.optimized){ $('yieldStatus').textContent=`Aktif • Best Yield ${Number(selectedAlternative.stats.residual_pct_total_land||0).toFixed(2)}% residual`; $('yieldStatus').className='validation ok'; }
+    else if(selectedAlternative?.stats?.optimized){ const eff=Number(selectedAlternative.stats.lot_efficiency_pct||0); $('yieldStatus').textContent=`Aktif • Efisiensi ${eff.toFixed(2)}%`; $('yieldStatus').className=`validation ${eff>=70?'ok':'warn'}`; }
     else { $('yieldStatus').textContent='Aktif • siap optimasi'; $('yieldStatus').className='validation neutral'; }
   }
   if(!on && $('yieldResult')){ $('yieldResult').className='yield-result empty'; $('yieldResult').textContent='Optimalisasi lahan nonaktif. Layout memakai skenario awal.'; }
@@ -427,14 +427,14 @@ async function saveProject(){
 
 function updateManualValidation(stats={}){
   if(!$('manualValidation')) return;
-  const outside=Number(stats.lots_outside_buildable||0), overlaps=Number(stats.lot_overlap_pairs||0), residual=Number(stats.residual_pct_total_land||0);
+  const outside=Number(stats.lots_outside_buildable||0), overlaps=Number(stats.lot_overlap_pairs||0), eff=Number(stats.lot_efficiency_pct||0);
   if(!landOptimizationEnabled()){
     if(outside===0 && overlaps===0){ $('manualValidation').textContent='Skenario awal • geometri OK'; $('manualValidation').className='validation ok'; }
     else { $('manualValidation').textContent=`Perlu cek: ${outside} di luar • ${overlaps} overlap`; $('manualValidation').className='validation warn'; }
     return;
   }
-  if(outside===0 && overlaps===0 && residual<=3.01){ $('manualValidation').textContent='Optimalisasi aktif • geometri + residual OK'; $('manualValidation').className='validation ok'; }
-  else { $('manualValidation').textContent=`Optimalisasi aktif: ${outside} di luar • ${overlaps} overlap • residual ${residual.toFixed(2)}%`; $('manualValidation').className='validation warn'; }
+  if(outside===0 && overlaps===0 && eff>=70.0){ $('manualValidation').textContent='Optimalisasi aktif • geometri + efisiensi OK'; $('manualValidation').className='validation ok'; }
+  else { $('manualValidation').textContent=`Optimalisasi aktif: ${outside} di luar • ${overlaps} overlap • efisiensi ${eff.toFixed(2)}%`; $('manualValidation').className='validation warn'; }
 }
 
 function setObjectEditorState(type){
@@ -523,7 +523,7 @@ async function recalculateManual(showMessage=false){
     $('drainageLength').textContent=fmtM(s.drainage_length_m); $('unusedArea').textContent=fmtM2(s.unused_area_m2); $('buildArea').textContent=fmtM2(p.buildable_area_m2);
     $('orientation').textContent=`${Number(selectedAlternative.angle_deg||0).toFixed(2)}° • ${selectedAlternative.pattern}`;
     if($('residualRatio')) $('residualRatio').textContent=`${Number(s.residual_pct_total_land||0).toFixed(2)}%`;
-    updateManualValidation(s); $('saveBtn').disabled=landOptimizationEnabled()?Number(s.residual_pct_total_land||999)>3.01:false; if(showMessage) msg('Statistik layout manual dihitung ulang.','success');
+    updateManualValidation(s); const effOk=Number(s.lot_efficiency_pct||0)>=70.0; $('saveBtn').disabled=landOptimizationEnabled()?(!effOk || s.manual_adjusted===true || s.validation_passed!==true):false; if(showMessage) msg('Statistik layout manual dihitung ulang.','success');
   }catch(e){ msg(`Recalculate gagal: ${e.message}`,'error'); }
 }
 async function rebuildRoadNetwork(doRecalc=true){
@@ -951,7 +951,7 @@ async function optimizeYield(){
       rth_pct:Number($('rthPct').value||10), psu_pct:Number($('psuPct').value||5), local_road_width_m:Number($('localRoad').value||6),
       road_shift_m:Math.min(6,Math.max(2,Number($('localRoad').value||6)*0.75)),
       allow_road_shift:false, allow_rth_psu_relocation:false, allow_selective_extension:false, max_extensions:0,
-      lot_efficiency_target_pct:70, strict_residual_cap:false, allow_residual_rth_absorption:false, max_optimize_seconds:20
+      lot_efficiency_target_pct:70, allow_residual_rth_absorption:false, max_optimize_seconds:20
     };
     const r=await api('/site-plan/optimize-yield',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!landOptimizationEnabled()){ msg('Hasil optimizer diabaikan karena Optimalisasi Lahan sudah dimatikan.','success'); return; }

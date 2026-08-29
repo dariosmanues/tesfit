@@ -94,3 +94,11 @@ Automated test suite `test_m2512_lot_efficiency.py` verifies all 7 mandatory acc
 
 All 7 scenarios passed successfully.
 Full regression suite (`test_m2511_topology_shapes.py`, `test_m2511_masterplan_topology.py`, `test_m2510_block_first.py`, `test_m258_saleable_residual.py`) passed with zero errors.
+
+## Runtime cleanup — active residual 3% target removed
+- The active Residual Optimizer no longer forces `max_residual_pct_total = 3.0` or `strict_residual_cap = True`.
+- The final Adaptive sweep is driven by the **>=70% gross lot-efficiency target**; TRUE residual is informational.
+- Manual recalculation reports `lot_efficiency_target_pct` / `lot_efficiency_met`, not residual-cap acceptance flags.
+- Frontend runtime/version residue is cleaned (`DEVOS_FRONTEND_VERSION = 2.5.12`, CSS cache tag 2.5.12, no active residual-3% save gate).
+- Regression ranking is strict lexicographic and dedicated tests prevent the 3% runtime gate from returning.
+- `_road_specs`, `_pack_standard_blocks`, and `generate_site_alternatives` are intentionally unchanged.
