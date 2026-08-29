@@ -7,6 +7,7 @@ FILES = [
     ROOT / "services/geometry-api/web/app.js",
     ROOT / "services/geometry-api/web/index.html",
     ROOT / "services/geometry-api/web/recovery-monitor.js",
+    ROOT / "services/geometry-api/test_m2513_recovery_solver.py",
 ]
 
 for path in FILES:
@@ -24,7 +25,8 @@ status.write_text(
     "STANDARD lot dimensions remain sourced only from Geometry Settings; Adaptive lots remain residual-only.\n\n"
     "Structural mutation can vary corridor count and spacing, short-branch count and length, single/dual spine, "
     "double-loaded coverage, road termination, perimeter-assisted access, and block-depth combinations.\n\n"
-    "Frontend title/version badges, cache-busting query strings, Recovery Solver labels, and backend `/health` version are synchronized to 2.5.14.\n"
+    "Frontend title/version badges, cache-busting query strings, Recovery Solver labels, backend `/health` version, "
+    "and version-specific regression assertions are synchronized to 2.5.14.\n"
     """,
     encoding="utf-8",
 )
