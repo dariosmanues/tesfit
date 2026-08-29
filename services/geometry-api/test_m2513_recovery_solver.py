@@ -71,7 +71,12 @@ def run_tests():
     assert len(orientation) >= 12
     assert any("Perimeter" in x["name"] for x in perimeter)
     assert any(x["facility_mode"] == "low-yield" for x in facility)
-    print("[OK] six-stage recovery strategy definitions")
+    assert any(x["id"] == "mutation" for x in rs.stage_definitions())
+    mutation_a = rs._mutation_specs(core, req, 0)
+    mutation_b = rs._mutation_specs(core, req, 1)
+    assert len(mutation_a) == 12 and len(mutation_b) == 12
+    assert {(x["angle"], x["shift_m"], x["spine_ratio"]) for x in mutation_a}.isdisjoint({(x["angle"], x["shift_m"], x["spine_ratio"]) for x in mutation_b})
+    print("[OK] staged recovery + deterministic continuing mutation definitions")
 
     # 4. At least one real recovery candidate executes through road->block->STANDARD.
     cand = rs._evaluate_spec(core, req, road[0], "road_topology", 1)
@@ -94,7 +99,8 @@ def run_tests():
     paths = {r.path for r in m.app.routes}
     assert "/site-plan/solver/start" in paths
     assert "/site-plan/solver/status/{job_id}" in paths
-    print("[OK] solver start/status routes registered")
+    assert "/site-plan/solver/cancel/{job_id}" in paths
+    print("[OK] solver start/status/cancel routes registered")
 
     # 7. Frontend contains monitor and polls real backend status.
     web = Path(__file__).resolve().parent / "web"
@@ -106,6 +112,8 @@ def run_tests():
     assert '/static/recovery-monitor.js?v=2.5.13' in html
     assert '/site-plan/solver/start' in js
     assert '/site-plan/solver/status/' in js
+    assert '/site-plan/solver/cancel/' in js
+    assert 'solverCancelBtn' in html
     assert 'candidate <70% hanya tampil pada Search History' not in js  # exact wording intentionally not hard-coded in logic
     assert '.solver-stage' in css
     assert 'const DEVOS_FRONTEND_VERSION = "2.5.13";' in appjs

@@ -23,3 +23,6 @@ Shows live stage, tested/total candidates, current strategy, Standard/Adaptive c
 
 ## Baseline protection
 The existing `generate_site_alternatives`, `_road_specs`, and `_pack_standard_blocks` implementations are not rewritten by this milestone. Recovery candidates are implemented in `app/recovery_solver.py` and registered as separate endpoints.
+
+## Continuous mutation rule
+If Feasibility Analysis still has a conservative theoretical upper bound >=70%, the solver does **not** finish with a sub-70 result. It enters `Topology Mutation Loop` and keeps testing deterministic new topology/orientation/phase/facility combinations until a valid >=70% candidate is found or the user explicitly presses **Stop Recovery Solver**. Candidate <70% remains REJECT throughout.

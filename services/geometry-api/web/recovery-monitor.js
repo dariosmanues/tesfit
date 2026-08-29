@@ -16,6 +16,7 @@ function resetRecoveryMonitor(){
   solverEl('solverTarget').textContent='70.00%';
   solverEl('solverGap').textContent='—';
   solverEl('solverProgressBar').style.width='0%';
+  if(solverEl('solverCancelBtn'))solverEl('solverCancelBtn').disabled=true;
   solverEl('solverStages').innerHTML='<div class="empty-state">Solver belum dijalankan.</div>';
   solverEl('solverCurrent').innerHTML='<div class="empty-state">Belum ada candidate aktif.</div>';
   solverEl('solverHistory').innerHTML='<div class="empty-state">Search History masih kosong.</div>';
@@ -116,6 +117,7 @@ function renderRecoverySolverStatus(job){
   renderSolverCurrent(job.current_candidate||null);
   renderSolverHistory(job.search_history||[]);
   renderSolverFeasibility(job.feasibility||job.result?.feasibility||null);
+  if(solverEl('solverCancelBtn'))solverEl('solverCancelBtn').disabled=!(job.status==='running'||job.status==='queued');
 }
 
 function clearGeneratedLayoutForNoPass(){
@@ -150,9 +152,21 @@ async function pollRecoverySolver(jobId){
     const job=await api(`/site-plan/solver/status/${encodeURIComponent(jobId)}`);
     renderRecoverySolverStatus(job);
     if(job.status==='failed') throw new Error(job.error||job.message||'Recovery Solver gagal');
-    if(job.status==='completed') return job;
+    if(job.status==='completed'||job.status==='cancelled') return job;
     await new Promise(resolve=>setTimeout(resolve,450));
   }
+}
+
+
+async function cancelRecoverySolver(){
+  if(!recoverySolverJobId||!recoverySolverRunning)return;
+  const btn=solverEl('solverCancelBtn');
+  try{
+    if(btn){btn.disabled=true;btn.textContent='Menghentikan…';}
+    await api(`/site-plan/solver/cancel/${encodeURIComponent(recoverySolverJobId)}`,{method:'POST'});
+    msg('Permintaan stop dikirim. Solver berhenti setelah candidate aktif selesai.');
+  }catch(e){msg(`Gagal menghentikan solver: ${e.message}`,'error');}
+  finally{if(btn)btn.textContent='Stop Recovery Solver';}
 }
 
 async function generateSitePlanRecovery(){
@@ -170,6 +184,7 @@ async function generateSitePlanRecovery(){
     const started=await api('/site-plan/solver/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(recoveryPayload())});
     recoverySolverJobId=started.job_id;
     const job=await pollRecoverySolver(recoverySolverJobId);
+    if(job.status==='cancelled'){msg('Recovery Solver dihentikan. Layout sebelumnya dipertahankan.');return;}
     sitePlan=job.result;
     if(!sitePlan)throw new Error('Solver selesai tanpa result payload');
 
@@ -202,4 +217,6 @@ window.addEventListener('load',()=>{
   resetRecoveryMonitor();
   const btn=solverEl('generateBtn');
   if(btn)btn.onclick=generateSitePlanRecovery;
+  const cancelBtn=solverEl('solverCancelBtn');
+  if(cancelBtn)cancelBtn.onclick=cancelRecoverySolver;
 });
