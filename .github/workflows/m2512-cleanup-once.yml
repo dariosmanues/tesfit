@@ -33,6 +33,7 @@ jobs:
         run: |
           python -m py_compile app/main.py
           node --check web/app.js
+          python -c "import app.main as m; m.init_db()"
           python test_m2512_lot_efficiency.py
           python test_m2511_masterplan_topology.py
           python test_m2511_topology_shapes.py
