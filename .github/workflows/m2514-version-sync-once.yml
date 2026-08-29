@@ -77,6 +77,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/m2514-version-sync-once.yml tools/m2514_version_sync_patch.py
-          git add services/geometry-api/app/main.py services/geometry-api/app/recovery_solver.py services/geometry-api/web/app.js services/geometry-api/web/index.html services/geometry-api/web/recovery-monitor.js services/geometry-api/test_m2514_version_sync.py MILESTONE2_5_14_STATUS.md
+          git add services/geometry-api/app/main.py services/geometry-api/app/recovery_solver.py services/geometry-api/web/app.js services/geometry-api/web/index.html services/geometry-api/web/recovery-monitor.js services/geometry-api/test_m2513_recovery_solver.py services/geometry-api/test_m2514_version_sync.py MILESTONE2_5_14_STATUS.md
           git commit -m "fix: synchronize Development OS version to M2.5.14"
           git push origin HEAD:fix/m2514-version-sync
