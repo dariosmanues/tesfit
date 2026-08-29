@@ -220,19 +220,19 @@ def run_tests():
     print("  [OK] Manual recalc has no active 3% residual acceptance flags")
 
     # -------------------------------------------------------------
-    # Scenario 10: Frontend version/gate cleanup remains valid after M2.5.13
+    # Scenario 10: Frontend version/gate cleanup remains valid after M2.5.14
     # -------------------------------------------------------------
     print("\n[Scenario 10] Verifying frontend version and active gate cleanup...")
     web_dir = Path(__file__).resolve().parent / 'web'
     app_js = (web_dir / 'app.js').read_text(encoding='utf-8')
     index_html = (web_dir / 'index.html').read_text(encoding='utf-8')
-    assert 'const DEVOS_FRONTEND_VERSION = "2.5.13";' in app_js
+    assert 'const DEVOS_FRONTEND_VERSION = "2.5.14";' in app_js
     assert 'residual<=3.01' not in app_js
     assert 'residual_pct_total_land||999)>3.01' not in app_js
-    assert '/static/app.css?v=2.5.13' in index_html
-    assert index_html.count('/static/app.js?v=2.5.13') == 1
-    assert index_html.count('/static/recovery-monitor.js?v=2.5.13') == 1
-    print("  [OK] M2.5.12 residual-gate contract remains intact under M2.5.13 frontend")
+    assert '/static/app.css?v=2.5.14' in index_html
+    assert index_html.count('/static/app.js?v=2.5.14') == 1
+    assert index_html.count('/static/recovery-monitor.js?v=2.5.14') == 1
+    print("  [OK] M2.5.12 residual-gate contract remains intact under M2.5.14 frontend")
 
     print("\n=======================================================")
     print("ALL 10 MILESTONE 2.5.12 ACCEPTANCE/REGRESSION TESTS PASSED SUCCESSFULLY!")
