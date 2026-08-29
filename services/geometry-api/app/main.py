@@ -3925,7 +3925,7 @@ def parse_dxf_bytes(data: bytes, epsg: int | None) -> Polygon | MultiPolygon:
 # -----------------------------
 @app.get("/health")
 async def health():
-    return {"ok": True, "database": "postgis" if is_postgres() else "sqlite-dev-fallback", "version": "2.5.12"}
+    return {"ok": True, "database": "postgis" if is_postgres() else "sqlite-dev-fallback", "version": "2.5.13"}
 
 
 @app.post("/geometry/stats")
@@ -4079,3 +4079,13 @@ def list_projects():
         {"id": r[0], "name": r[1], "stats": json.loads(r[2] or "{}"), "created_at": r[3]}
         for r in rows
     ]
+
+# -----------------------------
+# Milestone 2.5.13: staged Recovery Solver + live monitor API
+# -----------------------------
+try:
+    from .recovery_solver import register_recovery_solver as _register_recovery_solver
+except ImportError:  # direct script fallback
+    from recovery_solver import register_recovery_solver as _register_recovery_solver
+
+_register_recovery_solver(app, globals())

@@ -128,3 +128,4 @@ See `MILESTONE2_5_10_STATUS.md` for the release criteria, algorithm, regression 
 
 ## Milestone 2.5.11 — Road & Block Topology Optimization
 See `MILESTONE2_5_11_STATUS.md` for the current release criteria, topology search, block metrics, residual-only optimizer contract, regression evidence, and known limitations.
+- M2.5.13 adds a real staged Recovery Solver Monitor; only geometry-valid alternatives with gross lot efficiency >=70% enter the selectable Alternative Layout pool.

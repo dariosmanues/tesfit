@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Development OS — Milestone 2.5.12</title>
+  <title>Development OS — Milestone 2.5.13</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@watergis/maplibre-gl-terradraw@1.16.0/dist/maplibre-gl-terradraw.css" />
-  <link rel="stylesheet" href="/static/app.css?v=2.5.12" />
+  <link rel="stylesheet" href="/static/app.css?v=2.5.13" />
+  <link rel="stylesheet" href="/static/recovery-monitor.css?v=2.5.13" />
 </head>
 <body>
   <header>
     <div>
       <div class="eyebrow">DEVELOPMENT OS</div>
-      <h1>Generative Site Planning — Milestone 2.5.12</h1>
+      <h1>Generative Site Planning — Milestone 2.5.13</h1>
     </div>
     <div id="apiBadge" class="badge">API checking…</div>
   </header>
@@ -29,7 +30,7 @@
         <span><i class="swatch psu"></i>PSU</span>
         <span><i class="line-swatch drainage"></i>Drainase</span>
       </div>
-      <div class="map-hint">Gambar/import batas lahan. M2.5.12 membentuk <b>jalan → blok → kavling standar</b> dengan target <b>Efisiensi Kavling ≥ 70%</b>. Ukuran Geometry Settings adalah hard module; lahan sisa dievaluasi sebagai Adaptive.</div>
+      <div class="map-hint">Gambar/import batas lahan. M2.5.13 membentuk <b>jalan → blok → kavling standar</b> dengan target <b>Efisiensi Kavling ≥ 70%</b>. Ukuran Geometry Settings adalah hard module; lahan sisa dievaluasi sebagai Adaptive.</div>
     </section>
 
     <aside>
@@ -97,6 +98,32 @@
         </div>
         <label class="land-opt-master"><input id="landOptimizationToggle" type="checkbox" /> <span><b>Residual Optimizer — TARGET EFISIENSI KAVLING ≥ 70%</b><small>OFF = masterplan asli • ON = lahan sisa diolah menjadi Adaptive; jalan dan Kavling Standar tetap</small></span></label>
         <button id="generateBtn" class="accent" disabled>Generate Alternatif Layout</button>
+      </div>
+
+      <div class="panel solver-monitor" id="solverMonitor">
+        <div class="solver-head">
+          <div><h2>M2.5.13 — Recovery Solver Monitor</h2><div class="small">Progress berasal dari candidate yang benar-benar dihitung backend. Rule final tetap STRICT: Efisiensi Kavling ≥ 70%.</div></div>
+          <span id="solverOverallStatus" class="solver-state">Siap</span>
+        </div>
+        <div class="solver-kpis">
+          <div class="solver-kpi"><span>Best saat ini</span><b id="solverBest">—</b></div>
+          <div class="solver-kpi"><span>Target wajib</span><b id="solverTarget">70.00%</b></div>
+          <div class="solver-kpi" id="solverGapBox"><span>Gap</span><b id="solverGap">—</b></div>
+        </div>
+        <div class="solver-progress"><i id="solverProgressBar"></i></div>
+        <div id="solverStages" class="solver-stage-list"><div class="empty-state">Solver belum dijalankan.</div></div>
+        <div class="solver-subpanel">
+          <div class="solver-subpanel-title">Candidate aktif</div>
+          <div id="solverCurrent"><div class="empty-state">Belum ada candidate aktif.</div></div>
+        </div>
+        <div class="solver-subpanel">
+          <div class="solver-subpanel-title">Search History — candidate &lt;70% tetap REJECT</div>
+          <div id="solverHistory" class="solver-history"><div class="empty-state">Search History masih kosong.</div></div>
+        </div>
+        <div class="solver-subpanel">
+          <div class="solver-subpanel-title">Feasibility Analysis</div>
+          <div id="solverFeasibility"><div class="empty-state">Dijalankan jika seluruh recovery stage belum mencapai 70%.</div></div>
+        </div>
       </div>
 
       <div class="panel" id="alternativesPanel">
@@ -250,6 +277,7 @@
 
   <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@watergis/maplibre-gl-terradraw@1.16.0/dist/maplibre-gl-terradraw.umd.js"></script>
-  <script src="/static/app.js?v=2.5.12"></script>
+  <script src="/static/app.js?v=2.5.13"></script>
+  <script src="/static/recovery-monitor.js?v=2.5.13"></script>
 </body>
 </html>
