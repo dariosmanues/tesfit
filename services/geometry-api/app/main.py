@@ -1342,8 +1342,8 @@ def recalculate_manual_layout(req: SitePlanRecalculateRequest) -> dict[str, Any]
         "land_utilization_pct": round((lots_area / max(buildable.area - road_area - rth_area - psu_area - (reserve.area if not reserve.is_empty else 0.0), 1e-9)) * 100, 2),
         "residual_ratio_pct": round((unused_area / buildable.area * 100) if buildable.area else 0, 2),
         "residual_pct_total_land": round((unused_area / parcel_area * 100) if parcel_area else 0, 2),
-        "residual_cap_pct_total": 3.0,
-        "residual_cap_met": ((unused_area / parcel_area * 100) if parcel_area else 0) <= 3.01,
+        "lot_efficiency_target_pct": 70.0,
+        "lot_efficiency_met": ((lots_area / parcel_area * 100) if parcel_area else 0) >= 70.0 - 1e-4,
         "land_optimization_enabled": bool(req.land_optimization_enabled),
         "road_efficiency": round((lots_area / road_area) if road_area else 0, 3),
         "lots_outside_buildable": outside,
@@ -2862,90 +2862,98 @@ def _residual_parcelization_pass(buildable, roads, roads_union, rth, psu, lots, 
     }
 
 
-def _final_cap_parcelization_sweep(buildable, roads, roads_union, rth, psu, lots, meta, parcel_area, req: YieldOptimizeRequest):
-    """Final sweep: only saleable leftovers may reduce TRUE residual."""
-    cap_area = max(0.0, float(parcel_area) * 0.03)
+def _final_efficiency_parcelization_sweep(buildable, roads, roads_union, rth, psu, lots, meta, parcel_area, req: YieldOptimizeRequest):
+    """Final Adaptive sweep driven only by the M2.5.12 >=70% gross lot-efficiency target.
+
+    STANDARD lots, roads, RTH and PSU are immutable. Only genuinely saleable
+    residual polygons may be accepted as Adaptive lots. TRUE residual percentage
+    is informational and never controls acceptance or loop termination.
+    """
+    target_lot_area = max(0.0, float(parcel_area) * 0.70)
     developable = _safe_polygon_overlay(
         _polygonal_only(make_valid(buildable)),
-        _polygonal_only(unary_union([g for g in (roads_union,rth,psu) if g is not None and not g.is_empty])),
-        'difference'
+        _polygonal_only(unary_union([g for g in (roads_union, rth, psu) if g is not None and not g.is_empty])),
+        "difference",
     )
     if developable.is_empty:
         return list(lots), list(meta), {
-            'final_cap_parcels': 0,
-            'final_cap_parcel_area_m2': 0.0,
-            'rejected_final_cap_candidates': 0,
+            "efficiency_sweep_parcels": 0,
+            "efficiency_sweep_parcel_area_m2": 0.0,
+            "rejected_efficiency_candidates": 0,
+            "target_lot_area_m2": target_lot_area,
+            "true_residual_after_m2": 0.0,
         }
 
     out_lots = list(lots)
     out_meta = list(meta)
     occupied = _polygonal_only(unary_union(out_lots)) if out_lots else Polygon()
-    residual = _safe_polygon_overlay(developable, occupied, 'difference') if not occupied.is_empty else developable
+    residual = _safe_polygon_overlay(developable, occupied, "difference") if not occupied.is_empty else developable
+    current_lot_area = sum(float(g.area) for g in out_lots if g is not None and not g.is_empty)
 
-    if residual.is_empty or residual.area <= cap_area + 0.25:
+    if residual.is_empty or current_lot_area >= target_lot_area - 0.05:
         return out_lots, out_meta, {
-            'final_cap_parcels': 0,
-            'final_cap_parcel_area_m2': 0.0,
-            'rejected_final_cap_candidates': 0,
-            'true_residual_after_m2': float(residual.area if residual is not None and not residual.is_empty else 0.0),
+            "efficiency_sweep_parcels": 0,
+            "efficiency_sweep_parcel_area_m2": 0.0,
+            "rejected_efficiency_candidates": 0,
+            "target_lot_area_m2": target_lot_area,
+            "true_residual_after_m2": float(residual.area if residual is not None and not residual.is_empty else 0.0),
         }
 
     added = 0
     added_area = 0.0
     rejected = 0
-    index = _LotGridIndex(max(req.max_lot_width_m, req.max_lot_depth_m) * 1.5)
+    idx = _LotGridIndex(max(req.max_lot_width_m, req.max_lot_depth_m) * 1.5)
     for g in out_lots:
-        index.add(g)
+        idx.add(g)
 
-    for comp in sorted(_poly_parts(residual), key=lambda g:g.area, reverse=True):
-        if residual.area <= cap_area + 0.25:
+    for comp in sorted(_poly_parts(residual), key=lambda g: g.area, reverse=True):
+        if current_lot_area >= target_lot_area - 0.05:
             break
         comp = _polygonal_only(make_valid(comp))
         if comp.is_empty or comp.area < RESIDUAL_MIN_AREA_M2:
             rejected += 1
             continue
-        # `comp` comes from developable - occupied, so it is already a vacancy.
-        # Do not reject a valid residual component merely because shared-boundary
-        # precision produces a tiny spatial-index intersection.
+
         check = _residual_saleability(comp, roads, buildable, rth, psu)
-        if not check['saleable']:
+        if not check["saleable"]:
             rejected += 1
             continue
 
-        index.add(comp)
+        idx.add(comp)
         out_lots.append(comp)
         out_meta.append({
-            'road_id': check['road_id'],
-            'side': 0,
-            'width_m': float(check['frontage_m']),
-            'depth_m': float(comp.area/max(check['frontage_m'],0.1)),
-            't_m': 0.0,
-            'parcel_type': 'residual',
-            'source': 'residual',
-            'residual_parcel': True,
-            'final_cap_parcel': True,
-            'actual_area_m2': float(comp.area),
-            'frontage_m': float(check['frontage_m']),
-            'bbox_short_m': float(check['short_m']),
-            'bbox_long_m': float(check['long_m']),
-            'saleability_validated': True,
-            'access_status': 'road_frontage',
+            "road_id": check["road_id"],
+            "side": 0,
+            "width_m": float(check["frontage_m"]),
+            "depth_m": float(comp.area / max(check["frontage_m"], 0.1)),
+            "t_m": 0.0,
+            "parcel_type": "residual",
+            "source": "residual",
+            "residual_parcel": True,
+            "efficiency_sweep_parcel": True,
+            "actual_area_m2": float(comp.area),
+            "frontage_m": float(check["frontage_m"]),
+            "bbox_short_m": float(check["short_m"]),
+            "bbox_long_m": float(check["long_m"]),
+            "saleability_validated": True,
+            "access_status": "road_frontage",
         })
         added += 1
         added_area += comp.area
+        current_lot_area += comp.area
 
         occupied = _polygonal_only(unary_union(out_lots))
-        residual = _safe_polygon_overlay(developable, occupied, 'difference')
+        residual = _safe_polygon_overlay(developable, occupied, "difference")
         if residual.is_empty:
             break
 
     return out_lots, out_meta, {
-        'final_cap_parcels': added,
-        'final_cap_parcel_area_m2': added_area,
-        'rejected_final_cap_candidates': rejected,
-        'true_residual_after_m2': float(residual.area if residual is not None and not residual.is_empty else 0.0),
+        "efficiency_sweep_parcels": added,
+        "efficiency_sweep_parcel_area_m2": added_area,
+        "rejected_efficiency_candidates": rejected,
+        "target_lot_area_m2": target_lot_area,
+        "true_residual_after_m2": float(residual.area if residual is not None and not residual.is_empty else 0.0),
     }
-
 
 def _lot_detail_records(lots, meta):
     details=[]
@@ -3511,14 +3519,12 @@ def _network_geo_output(rec, buildable, epsg):
 
 
 def optimize_land_utilization(req: YieldOptimizeRequest):
-    """M2.5.11 residual-only optimizer.
+    """M2.5.12 residual-only optimizer.
 
     STANDARD lots, roads, RTH and PSU are immutable here.  Masterplan topology
     is optimized during /site-plan/generate candidate search; this endpoint may
     only convert genuine leftover land into validated ADAPTIVE parcels.
     """
-    req.max_residual_pct_total = 3.0
-    req.strict_residual_cap = True
     req.allow_road_shift = False
     req.allow_rth_psu_relocation = False
     req.allow_selective_extension = False
@@ -3589,14 +3595,13 @@ def optimize_land_utilization(req: YieldOptimizeRequest):
         buildable, roads, roads_union, rth, psu, standard_lots, standard_meta, req
     )
     lots, meta, rejected_pre = _filter_unsaleable_residual_lots(lots, meta, roads, buildable, rth, psu)
-    lots, meta, sweep_info = _final_cap_parcelization_sweep(
+    lots, meta, sweep_info = _final_efficiency_parcelization_sweep(
         buildable, roads, roads_union, rth, psu, lots, meta, parcel_area, req
     )
     lots, meta, rejected_post = _filter_unsaleable_residual_lots(lots, meta, roads, buildable, rth, psu)
 
     stats = _yield_stats(buildable, parcel_area, roads_union, rth, psu, lots)
     final_residual_pct_total = float(stats.get('residual_pct_total_land', 0.0))
-    cap_met = final_residual_pct_total <= 3.01
     final_validation = _final_siteplan_acceptance(
         buildable, roads, roads_union, lots, meta, rth, psu, parcel_area,
         final_residual_pct_total,
@@ -3725,8 +3730,9 @@ def optimize_land_utilization(req: YieldOptimizeRequest):
             'optimizer_separation': 'MASTERPLAN_TOPOLOGY_DURING_GENERATE; RESIDUAL_ONLY_AFTER_SELECTION',
             'selective_road_extensions': [],
             'residual_count': len(residual_records), 'efficiency_info': efficiency_info,
-            'residual_parcel_count': int(parcel_info.get('residual_parcel_count',0)) + int(sweep_info.get('final_cap_parcels',0)),
-            'residual_parcel_area_m2': round(float(parcel_info.get('residual_parcel_area_m2',0.0)) + float(sweep_info.get('final_cap_parcel_area_m2',0.0)),2),
+            'residual_parcel_count': int(parcel_info.get('residual_parcel_count',0)) + int(sweep_info.get('efficiency_sweep_parcels',0)),
+            'residual_parcel_area_m2': round(float(parcel_info.get('residual_parcel_area_m2',0.0)) + float(sweep_info.get('efficiency_sweep_parcel_area_m2',0.0)),2),
+            'efficiency_sweep_parcels': int(sweep_info.get('efficiency_sweep_parcels',0)),
             'rejected_unsaleable_before_final': len(rejected_pre),
             'rejected_unsaleable_after_final': len(rejected_post),
             'final_validation': final_validation,

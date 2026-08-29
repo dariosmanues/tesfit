@@ -3,6 +3,7 @@
 ## CURRENT BEHAVIOR — M2.5.12
 - **Hard Requirement: Gross Lot Efficiency >= 70%.** Formula: `lot_efficiency_pct = (standard_lot_area + adaptive_lot_area) / total_land_area * 100`. Total parcel area is used as the sole denominator.
 - **Residual <= 3% hard gate removed:** Residual is now purely informational (`residual_true_area_m2`, `residual_true_pct`) and never causes layout rejection if lot efficiency >= 70%.
+- **Runtime cleanup:** no active residual-3% sweep/save/recalculation gate remains; road/block topology and Standard packing are unchanged.
 - **Geometry Settings is an immutable STANDARD module.** Example: 8 m x 15 m means every STANDARD lot is exactly 8 x 15 (120 m2); it is never clipped, shrunk, stretched, deformed, or transformed into Adaptive.
 - **Masterplan optimization happens before lot packing.** Generate searches multiple road topology/orientation candidates, forms blocks, analyzes block quality, then packs exact STANDARD lots.
 - **Candidate ranking priority:** Passing candidates (lot efficiency >= 70%) -> Maximum STANDARD count -> Highest lot efficiency % -> Fewest Adaptive count -> Smallest Road area -> Smallest Residual area -> Higher Block Regularity -> Higher Road Connectivity.

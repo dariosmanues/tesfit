@@ -1,4 +1,5 @@
 import json
+import inspect
 import sys
 from pathlib import Path
 from shapely.geometry import Polygon, box, mapping, shape
@@ -111,21 +112,24 @@ def run_tests():
     # Scenario 6: Test Candidate Ranking
     # -------------------------------------------------------------
     print("\n[Scenario 6] Testing Candidate Ranking...")
-    # Candidate ranking in site['alternatives']
+    # Candidate ranking must exactly follow the runtime lexicographic ordering.
     alts = site['alternatives']
+    def rank_key(alt):
+        s = alt['stats']
+        return (
+            -int(s.get('invalid_standard_lot_count', 0)),
+            1 if bool(s.get('lot_efficiency_met', False)) else 0,
+            int(s.get('standard_lot_count', 0)),
+            float(s.get('lot_efficiency_pct', 0.0)),
+            -int(s.get('adaptive_lot_count', 0)),
+            -float(s.get('road_area_m2', 999999.0)),
+            -float(s.get('residual_true_area_m2', s.get('unused_area_m2', 999999.0))),
+            float(s.get('average_block_regularity', 0.0)),
+            float(s.get('road_connectivity_score', 0.0)),
+        )
     for i in range(len(alts) - 1):
-        curr = alts[i]
-        nxt = alts[i + 1]
-        curr_pass = curr['stats'].get('lot_efficiency_met', False)
-        nxt_pass = nxt['stats'].get('lot_efficiency_met', False)
-        if curr_pass and not nxt_pass:
-            assert True # Passing candidate correctly ranked above failing
-        elif curr_pass == nxt_pass:
-            # If both pass or both fail, check standard count or efficiency
-            curr_std = curr['stats']['standard_lot_count']
-            nxt_std = nxt['stats']['standard_lot_count']
-            assert curr_std >= nxt_std or curr['stats']['lot_efficiency_pct'] >= nxt['stats']['lot_efficiency_pct'] - 5.0
-    print(f"  [OK] Candidates ranked properly with #1 ALT-1 (Efficiency: {alts[0]['stats']['lot_efficiency_pct']}%, Standard: {alts[0]['stats']['standard_lot_count']})")
+        assert rank_key(alts[i]) >= rank_key(alts[i + 1]), f"Ranking inversion at {i}"
+    print(f"  [OK] Strict lexicographic ranking verified for {len(alts)} candidates")
 
     # -------------------------------------------------------------
     # Scenario 7: Test Save Contract
@@ -190,8 +194,47 @@ def run_tests():
         assert e.status_code == 422
         print(f"  [OK] Save project properly rejected when validation.valid is False (HTTP 422: {e.detail['message']})")
 
+    # -------------------------------------------------------------
+    # Scenario 8: Active runtime contains no residual-3% optimizer target
+    # -------------------------------------------------------------
+    print("\n[Scenario 8] Verifying active runtime has no residual-3% target...")
+    opt_src = inspect.getsource(m.optimize_land_utilization)
+    assert 'req.max_residual_pct_total = 3.0' not in opt_src
+    assert 'strict_residual_cap = True' not in opt_src
+    assert '_final_cap_parcelization_sweep' not in opt_src
+    assert '3.01' not in opt_src
+    assert opt['optimization']['efficiency_info']['target_efficiency_pct'] == 70.0
+    assert 'residual_cap_met' not in opt['stats']
+    assert 'residual_cap_pct_total' not in opt['stats']
+    print("  [OK] Optimizer runtime is driven by >=70% gross lot efficiency")
+
+    # -------------------------------------------------------------
+    # Scenario 9: Manual recalc contract exposes efficiency, not residual cap
+    # -------------------------------------------------------------
+    print("\n[Scenario 9] Verifying manual recalculation KPI contract...")
+    recalc_src = inspect.getsource(m.recalculate_manual_layout)
+    assert 'residual_cap_pct_total' not in recalc_src
+    assert 'residual_cap_met' not in recalc_src
+    assert 'lot_efficiency_target_pct' in recalc_src
+    assert 'lot_efficiency_met' in recalc_src
+    print("  [OK] Manual recalc has no active 3% residual acceptance flags")
+
+    # -------------------------------------------------------------
+    # Scenario 10: Frontend version/gate cleanup
+    # -------------------------------------------------------------
+    print("\n[Scenario 10] Verifying frontend version and active gate cleanup...")
+    web_dir = Path(__file__).resolve().parent / 'web'
+    app_js = (web_dir / 'app.js').read_text(encoding='utf-8')
+    index_html = (web_dir / 'index.html').read_text(encoding='utf-8')
+    assert 'const DEVOS_FRONTEND_VERSION = "2.5.12";' in app_js
+    assert 'residual<=3.01' not in app_js
+    assert 'residual_pct_total_land||999)>3.01' not in app_js
+    assert '/static/app.css?v=2.5.12' in index_html
+    assert index_html.count('/static/app.js?v=2.5.12') == 1
+    print("  [OK] Frontend is consistently M2.5.12 and has no active residual-3% save gate")
+
     print("\n=======================================================")
-    print("ALL 7 MILESTONE 2.5.12 ACCEPTANCE TESTS PASSED SUCCESSFULLY!")
+    print("ALL 10 MILESTONE 2.5.12 ACCEPTANCE/REGRESSION TESTS PASSED SUCCESSFULLY!")
     print("=======================================================")
 
 if __name__ == "__main__":
