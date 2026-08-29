@@ -20,7 +20,15 @@ jobs:
           python-version: '3.11'
 
       - name: Apply structural corridor patch
-        run: python tools/m2513_structural_corridor_patch.py
+        run: |
+          python tools/m2513_structural_corridor_patch.py
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('services/geometry-api/app/recovery_solver.py')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('def _mutation_specs(core: dict[str, Any], req: Any, round_no: int, batch_size: int = 16)', 'def _mutation_specs(core: dict[str, Any], req: Any, round_no: int, batch_size: int = 12)', 1)
+          p.write_text(s, encoding='utf-8')
+          PY
 
       - name: Install dependencies
         working-directory: services/geometry-api
