@@ -43,7 +43,7 @@ def sample_req(**overrides):
 
 
 def run_tests():
-    print("=== M2.5.13 Recovery Solver tests ===")
+    print("=== M2.5.14 Recovery Solver tests ===")
 
     # 1. STRICT 70% gate: 69.99 is never a valid alternative.
     pool = [fake_alt(69.99, 200, name="fail"), fake_alt(70.0, 180, name="pass")]
@@ -109,14 +109,14 @@ def run_tests():
     css = (web / "recovery-monitor.css").read_text(encoding="utf-8")
     appjs = (web / "app.js").read_text(encoding="utf-8")
     assert 'id="solverMonitor"' in html
-    assert '/static/recovery-monitor.js?v=2.5.13' in html
+    assert '/static/recovery-monitor.js?v=2.5.14' in html
     assert '/site-plan/solver/start' in js
     assert '/site-plan/solver/status/' in js
     assert '/site-plan/solver/cancel/' in js
     assert 'solverCancelBtn' in html
     assert 'candidate <70% hanya tampil pada Search History' not in js  # exact wording intentionally not hard-coded in logic
     assert '.solver-stage' in css
-    assert 'const DEVOS_FRONTEND_VERSION = "2.5.13";' in appjs
+    assert 'const DEVOS_FRONTEND_VERSION = "2.5.14";' in appjs
     print("[OK] live monitor frontend wiring")
 
     # 8. User-facing alternatives are strict valid only.
@@ -125,7 +125,7 @@ def run_tests():
     ]))
     print("[OK] rejected candidates never enter Alternatif Layout")
 
-    print("ALL M2.5.13 RECOVERY SOLVER TESTS PASSED")
+    print("ALL M2.5.14 RECOVERY SOLVER TESTS PASSED")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-// M2.5.13 — real backend Recovery Solver monitor.
+// M2.5.14 — real backend Recovery Solver monitor.
 // Progress shown here comes only from /site-plan/solver/status; there is no fake timer progress.
 let recoverySolverJobId = null;
 let recoverySolverRunning = false;
@@ -182,7 +182,7 @@ async function generateSitePlanRecovery(){
     solverEl('solverMonitor').classList.add('running');
     solverEl('solverOverallStatus').textContent='Memulai solver…';
     solverEl('solverOverallStatus').className='solver-state running';
-    msg('M2.5.13 Recovery Solver: mencari layout VALID dengan Efisiensi Kavling ≥70%…');
+    msg('M2.5.14 Recovery Solver: mencari layout VALID dengan Efisiensi Kavling ≥70%…');
 
     const started=await api('/site-plan/solver/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(recoveryPayload())});
     recoverySolverJobId=started.job_id;

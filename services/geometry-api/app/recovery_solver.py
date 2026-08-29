@@ -812,7 +812,7 @@ def _finish_success(job_id: str, req: Any, base_result: dict[str, Any], pool: li
         "parcel_stats": base_result.get("parcel_stats"),
         "settings": req.model_dump() if hasattr(req, "model_dump") else {},
         "alternatives": valid,
-        "notice": "M2.5.13 Recovery Solver: hanya candidate >=70% dan final geometry validation PASS yang masuk Alternatif Layout.",
+        "notice": "M2.5.14 Recovery Solver: hanya candidate >=70% dan final geometry validation PASS yang masuk Alternatif Layout.",
     }
 
     def update(job: dict[str, Any]) -> None:
@@ -1092,7 +1092,7 @@ def _run_recovery_solver(core: dict[str, Any], req: Any, job_id: str) -> None:
 
 
 def register_recovery_solver(app: Any, core: dict[str, Any]) -> None:
-    """Register M2.5.13 async/polling Recovery Solver endpoints."""
+    """Register M2.5.14 async/polling Recovery Solver endpoints."""
 
     @app.post("/site-plan/solver/start")
     def start_solver(payload: dict[str, Any]):

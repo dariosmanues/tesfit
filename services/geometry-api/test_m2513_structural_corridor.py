@@ -15,7 +15,7 @@ def sample_req():
 
 
 def run_tests():
-    print("=== M2.5.13 Structural Corridor Recovery tests ===")
+    print("=== M2.5.14 Structural Corridor Recovery tests ===")
     req = sample_req()
     core = vars(m)
     specs = rs._mutation_specs(core, req, 0, batch_size=64)

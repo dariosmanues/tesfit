@@ -1,4 +1,4 @@
-const DEVOS_FRONTEND_VERSION = "2.5.13";
+const DEVOS_FRONTEND_VERSION = "2.5.14";
 const API = '';
 let currentGeometry = null;
 let sitePlan = null;
