@@ -1,0 +1,348 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = ROOT / "services/geometry-api/app/main.py"
+JS = ROOT / "services/geometry-api/web/app.js"
+HTML = ROOT / "services/geometry-api/web/index.html"
+TEST = ROOT / "services/geometry-api/test_m2512_lot_efficiency.py"
+STATUS = ROOT / "MILESTONE2_5_12_STATUS.md"
+README = ROOT / "README.md"
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    n = text.count(old)
+    if n != 1:
+        raise RuntimeError(f"{label}: expected exactly 1 match, found {n}")
+    return text.replace(old, new, 1)
+
+
+# ------------------------------------------------------------------
+# Backend: remove only ACTIVE 3% acceptance/optimizer behavior.
+# DO NOT touch _road_specs, _pack_standard_blocks, generate_site_alternatives.
+# ------------------------------------------------------------------
+main = MAIN.read_text(encoding="utf-8")
+
+# Snapshot protected road/block functions before edits.
+def section(text: str, start_marker: str, end_marker: str) -> str:
+    a = text.index(start_marker)
+    b = text.index(end_marker, a)
+    return text[a:b]
+
+protected_before = {
+    "road_specs": section(main, "def _road_specs(", "\ndef _roads_from_specs"),
+    "pack_standard_blocks": section(main, "def _pack_standard_blocks(", "\ndef _standard_geometry_audit"),
+    "generate_site_alternatives": section(main, "def generate_site_alternatives(", "\n\n# -----------------------------\n# Milestone 2.2"),
+}
+
+main = replace_once(
+    main,
+    '        "residual_cap_pct_total": 3.0,\n        "residual_cap_met": ((unused_area / parcel_area * 100) if parcel_area else 0) <= 3.01,\n',
+    '        "lot_efficiency_target_pct": 70.0,\n        "lot_efficiency_met": ((lots_area / parcel_area * 100) if parcel_area else 0) >= 70.0 - 1e-4,\n',
+    "manual recalc residual-cap stats",
+)
+
+# Replace final cap-driven residual sweep with target-driven efficiency sweep.
+a = main.index("def _final_cap_parcelization_sweep(")
+b = main.index("\ndef _lot_detail_records", a)
+new_sweep = '''def _final_efficiency_parcelization_sweep(buildable, roads, roads_union, rth, psu, lots, meta, parcel_area, req: YieldOptimizeRequest):
+    """Final Adaptive sweep driven only by the M2.5.12 >=70% gross lot-efficiency target.
+
+    STANDARD lots, roads, RTH and PSU are immutable. Only genuinely saleable
+    residual polygons may be accepted as Adaptive lots. TRUE residual percentage
+    is informational and never controls acceptance or loop termination.
+    """
+    target_lot_area = max(0.0, float(parcel_area) * 0.70)
+    developable = _safe_polygon_overlay(
+        _polygonal_only(make_valid(buildable)),
+        _polygonal_only(unary_union([g for g in (roads_union, rth, psu) if g is not None and not g.is_empty])),
+        "difference",
+    )
+    if developable.is_empty:
+        return list(lots), list(meta), {
+            "efficiency_sweep_parcels": 0,
+            "efficiency_sweep_parcel_area_m2": 0.0,
+            "rejected_efficiency_candidates": 0,
+            "target_lot_area_m2": target_lot_area,
+            "true_residual_after_m2": 0.0,
+        }
+
+    out_lots = list(lots)
+    out_meta = list(meta)
+    occupied = _polygonal_only(unary_union(out_lots)) if out_lots else Polygon()
+    residual = _safe_polygon_overlay(developable, occupied, "difference") if not occupied.is_empty else developable
+    current_lot_area = sum(float(g.area) for g in out_lots if g is not None and not g.is_empty)
+
+    if residual.is_empty or current_lot_area >= target_lot_area - 0.05:
+        return out_lots, out_meta, {
+            "efficiency_sweep_parcels": 0,
+            "efficiency_sweep_parcel_area_m2": 0.0,
+            "rejected_efficiency_candidates": 0,
+            "target_lot_area_m2": target_lot_area,
+            "true_residual_after_m2": float(residual.area if residual is not None and not residual.is_empty else 0.0),
+        }
+
+    added = 0
+    added_area = 0.0
+    rejected = 0
+    idx = _LotGridIndex(max(req.max_lot_width_m, req.max_lot_depth_m) * 1.5)
+    for g in out_lots:
+        idx.add(g)
+
+    for comp in sorted(_poly_parts(residual), key=lambda g: g.area, reverse=True):
+        if current_lot_area >= target_lot_area - 0.05:
+            break
+        comp = _polygonal_only(make_valid(comp))
+        if comp.is_empty or comp.area < RESIDUAL_MIN_AREA_M2:
+            rejected += 1
+            continue
+
+        check = _residual_saleability(comp, roads, buildable, rth, psu)
+        if not check["saleable"]:
+            rejected += 1
+            continue
+
+        idx.add(comp)
+        out_lots.append(comp)
+        out_meta.append({
+            "road_id": check["road_id"],
+            "side": 0,
+            "width_m": float(check["frontage_m"]),
+            "depth_m": float(comp.area / max(check["frontage_m"], 0.1)),
+            "t_m": 0.0,
+            "parcel_type": "residual",
+            "source": "residual",
+            "residual_parcel": True,
+            "efficiency_sweep_parcel": True,
+            "actual_area_m2": float(comp.area),
+            "frontage_m": float(check["frontage_m"]),
+            "bbox_short_m": float(check["short_m"]),
+            "bbox_long_m": float(check["long_m"]),
+            "saleability_validated": True,
+            "access_status": "road_frontage",
+        })
+        added += 1
+        added_area += comp.area
+        current_lot_area += comp.area
+
+        occupied = _polygonal_only(unary_union(out_lots))
+        residual = _safe_polygon_overlay(developable, occupied, "difference")
+        if residual.is_empty:
+            break
+
+    return out_lots, out_meta, {
+        "efficiency_sweep_parcels": added,
+        "efficiency_sweep_parcel_area_m2": added_area,
+        "rejected_efficiency_candidates": rejected,
+        "target_lot_area_m2": target_lot_area,
+        "true_residual_after_m2": float(residual.area if residual is not None and not residual.is_empty else 0.0),
+    }
+
+'''
+main = main[:a] + new_sweep + main[b + 1:]
+
+main = replace_once(
+    main,
+    'def optimize_land_utilization(req: YieldOptimizeRequest):\n    """M2.5.11 residual-only optimizer.\n',
+    'def optimize_land_utilization(req: YieldOptimizeRequest):\n    """M2.5.12 residual-only optimizer.\n',
+    "optimizer docstring version",
+)
+main = replace_once(
+    main,
+    "    req.max_residual_pct_total = 3.0\n    req.strict_residual_cap = True\n",
+    "",
+    "forced optimizer residual cap",
+)
+main = replace_once(
+    main,
+    "    lots, meta, sweep_info = _final_cap_parcelization_sweep(\n",
+    "    lots, meta, sweep_info = _final_efficiency_parcelization_sweep(\n",
+    "final sweep call",
+)
+main = replace_once(
+    main,
+    "    cap_met = final_residual_pct_total <= 3.01\n",
+    "",
+    "cap_met residue",
+)
+main = replace_once(
+    main,
+    "            'residual_parcel_count': int(parcel_info.get('residual_parcel_count',0)) + int(sweep_info.get('final_cap_parcels',0)),\n            'residual_parcel_area_m2': round(float(parcel_info.get('residual_parcel_area_m2',0.0)) + float(sweep_info.get('final_cap_parcel_area_m2',0.0)),2),\n",
+    "            'residual_parcel_count': int(parcel_info.get('residual_parcel_count',0)) + int(sweep_info.get('efficiency_sweep_parcels',0)),\n            'residual_parcel_area_m2': round(float(parcel_info.get('residual_parcel_area_m2',0.0)) + float(sweep_info.get('efficiency_sweep_parcel_area_m2',0.0)),2),\n            'efficiency_sweep_parcels': int(sweep_info.get('efficiency_sweep_parcels',0)),\n",
+    "optimizer sweep stats keys",
+)
+
+# Active optimizer/recalc guards.
+opt_src = section(main, "def optimize_land_utilization(", "\n\n@app.post('/site-plan/optimize-yield')")
+recalc_src = section(main, "def recalculate_manual_layout(", "\n\n@app.post(\"/site-plan/recalculate\")")
+assert "req.max_residual_pct_total = 3.0" not in opt_src
+assert "strict_residual_cap = True" not in opt_src
+assert "_final_cap_parcelization_sweep" not in opt_src
+assert "3.01" not in opt_src
+assert "residual_cap_pct_total" not in recalc_src
+assert "residual_cap_met" not in recalc_src
+
+# Protected topology/packing functions must remain byte-for-byte identical.
+protected_after = {
+    "road_specs": section(main, "def _road_specs(", "\ndef _roads_from_specs"),
+    "pack_standard_blocks": section(main, "def _pack_standard_blocks(", "\ndef _standard_geometry_audit"),
+    "generate_site_alternatives": section(main, "def generate_site_alternatives(", "\n\n# -----------------------------\n# Milestone 2.2"),
+}
+assert protected_before == protected_after, "Protected road/block parcelization code changed"
+MAIN.write_text(main, encoding="utf-8")
+
+
+# ------------------------------------------------------------------
+# Frontend version/gate cleanup.
+# ------------------------------------------------------------------
+js = JS.read_text(encoding="utf-8")
+js = replace_once(js, 'const DEVOS_FRONTEND_VERSION = "2.5.7";', 'const DEVOS_FRONTEND_VERSION = "2.5.12";', "frontend version")
+js = replace_once(
+    js,
+    "    else if(selectedAlternative?.stats?.optimized){ $('yieldStatus').textContent=`Aktif • Best Yield ${Number(selectedAlternative.stats.residual_pct_total_land||0).toFixed(2)}% residual`; $('yieldStatus').className='validation ok'; }",
+    "    else if(selectedAlternative?.stats?.optimized){ const eff=Number(selectedAlternative.stats.lot_efficiency_pct||0); $('yieldStatus').textContent=`Aktif • Efisiensi ${eff.toFixed(2)}%`; $('yieldStatus').className=`validation ${eff>=70?'ok':'warn'}`; }",
+    "optimized status KPI",
+)
+js = replace_once(
+    js,
+    "  const outside=Number(stats.lots_outside_buildable||0), overlaps=Number(stats.lot_overlap_pairs||0), residual=Number(stats.residual_pct_total_land||0);\n",
+    "  const outside=Number(stats.lots_outside_buildable||0), overlaps=Number(stats.lot_overlap_pairs||0), eff=Number(stats.lot_efficiency_pct||0);\n",
+    "legacy manual validator metric",
+)
+js = replace_once(
+    js,
+    "  if(outside===0 && overlaps===0 && residual<=3.01){ $('manualValidation').textContent='Optimalisasi aktif • geometri + residual OK'; $('manualValidation').className='validation ok'; }\n  else { $('manualValidation').textContent=`Optimalisasi aktif: ${outside} di luar • ${overlaps} overlap • residual ${residual.toFixed(2)}%`; $('manualValidation').className='validation warn'; }\n",
+    "  if(outside===0 && overlaps===0 && eff>=70.0){ $('manualValidation').textContent='Optimalisasi aktif • geometri + efisiensi OK'; $('manualValidation').className='validation ok'; }\n  else { $('manualValidation').textContent=`Optimalisasi aktif: ${outside} di luar • ${overlaps} overlap • efisiensi ${eff.toFixed(2)}%`; $('manualValidation').className='validation warn'; }\n",
+    "legacy manual validator gate",
+)
+js = replace_once(
+    js,
+    "    updateManualValidation(s); $('saveBtn').disabled=landOptimizationEnabled()?Number(s.residual_pct_total_land||999)>3.01:false; if(showMessage) msg('Statistik layout manual dihitung ulang.','success');",
+    "    updateManualValidation(s); const effOk=Number(s.lot_efficiency_pct||0)>=70.0; $('saveBtn').disabled=landOptimizationEnabled()?(!effOk || s.manual_adjusted===true || s.validation_passed!==true):false; if(showMessage) msg('Statistik layout manual dihitung ulang.','success');",
+    "active manual save residual gate",
+)
+js = replace_once(
+    js,
+    "      lot_efficiency_target_pct:70, strict_residual_cap:false, allow_residual_rth_absorption:false, max_optimize_seconds:20\n",
+    "      lot_efficiency_target_pct:70, allow_residual_rth_absorption:false, max_optimize_seconds:20\n",
+    "strict residual payload residue",
+)
+assert "residual<=3.01" not in js
+assert "residual_pct_total_land||999)>3.01" not in js
+JS.write_text(js, encoding="utf-8")
+
+html = HTML.read_text(encoding="utf-8")
+html = replace_once(html, "/static/app.css?v=2.5.8", "/static/app.css?v=2.5.12", "CSS cache version")
+assert html.count('/static/app.js?v=2.5.12') == 1
+HTML.write_text(html, encoding="utf-8")
+
+
+# ------------------------------------------------------------------
+# Tighten M2.5.12 regression tests.
+# ------------------------------------------------------------------
+test = TEST.read_text(encoding="utf-8")
+if "import inspect\n" not in test:
+    test = test.replace("import json\n", "import json\nimport inspect\n", 1)
+
+old_rank = '''    # Candidate ranking in site['alternatives']
+    alts = site['alternatives']
+    for i in range(len(alts) - 1):
+        curr = alts[i]
+        nxt = alts[i + 1]
+        curr_pass = curr['stats'].get('lot_efficiency_met', False)
+        nxt_pass = nxt['stats'].get('lot_efficiency_met', False)
+        if curr_pass and not nxt_pass:
+            assert True # Passing candidate correctly ranked above failing
+        elif curr_pass == nxt_pass:
+            # If both pass or both fail, check standard count or efficiency
+            curr_std = curr['stats']['standard_lot_count']
+            nxt_std = nxt['stats']['standard_lot_count']
+            assert curr_std >= nxt_std or curr['stats']['lot_efficiency_pct'] >= nxt['stats']['lot_efficiency_pct'] - 5.0
+    print(f"  [OK] Candidates ranked properly with #1 ALT-1 (Efficiency: {alts[0]['stats']['lot_efficiency_pct']}%, Standard: {alts[0]['stats']['standard_lot_count']})")
+'''
+new_rank = '''    # Candidate ranking must exactly follow the runtime lexicographic ordering.
+    alts = site['alternatives']
+    def rank_key(alt):
+        s = alt['stats']
+        return (
+            -int(s.get('invalid_standard_lot_count', 0)),
+            1 if bool(s.get('lot_efficiency_met', False)) else 0,
+            int(s.get('standard_lot_count', 0)),
+            float(s.get('lot_efficiency_pct', 0.0)),
+            -int(s.get('adaptive_lot_count', 0)),
+            -float(s.get('road_area_m2', 999999.0)),
+            -float(s.get('residual_true_area_m2', s.get('unused_area_m2', 999999.0))),
+            float(s.get('average_block_regularity', 0.0)),
+            float(s.get('road_connectivity_score', 0.0)),
+        )
+    for i in range(len(alts) - 1):
+        assert rank_key(alts[i]) >= rank_key(alts[i + 1]), f"Ranking inversion at {i}"
+    print(f"  [OK] Strict lexicographic ranking verified for {len(alts)} candidates")
+'''
+test = replace_once(test, old_rank, new_rank, "candidate ranking regression")
+
+marker = '''    print("\\n=======================================================")
+    print("ALL 7 MILESTONE 2.5.12 ACCEPTANCE TESTS PASSED SUCCESSFULLY!")
+'''
+extra = '''    # -------------------------------------------------------------
+    # Scenario 8: Active runtime contains no residual-3% optimizer target
+    # -------------------------------------------------------------
+    print("\\n[Scenario 8] Verifying active runtime has no residual-3% target...")
+    opt_src = inspect.getsource(m.optimize_land_utilization)
+    assert 'req.max_residual_pct_total = 3.0' not in opt_src
+    assert 'strict_residual_cap = True' not in opt_src
+    assert '_final_cap_parcelization_sweep' not in opt_src
+    assert '3.01' not in opt_src
+    assert opt['optimization']['efficiency_info']['target_efficiency_pct'] == 70.0
+    assert 'residual_cap_met' not in opt['stats']
+    assert 'residual_cap_pct_total' not in opt['stats']
+    print("  [OK] Optimizer runtime is driven by >=70% gross lot efficiency")
+
+    # -------------------------------------------------------------
+    # Scenario 9: Manual recalc contract exposes efficiency, not residual cap
+    # -------------------------------------------------------------
+    print("\\n[Scenario 9] Verifying manual recalculation KPI contract...")
+    recalc_src = inspect.getsource(m.recalculate_manual_layout)
+    assert 'residual_cap_pct_total' not in recalc_src
+    assert 'residual_cap_met' not in recalc_src
+    assert 'lot_efficiency_target_pct' in recalc_src
+    assert 'lot_efficiency_met' in recalc_src
+    print("  [OK] Manual recalc has no active 3% residual acceptance flags")
+
+    # -------------------------------------------------------------
+    # Scenario 10: Frontend version/gate cleanup
+    # -------------------------------------------------------------
+    print("\\n[Scenario 10] Verifying frontend version and active gate cleanup...")
+    web_dir = Path(__file__).resolve().parent / 'web'
+    app_js = (web_dir / 'app.js').read_text(encoding='utf-8')
+    index_html = (web_dir / 'index.html').read_text(encoding='utf-8')
+    assert 'const DEVOS_FRONTEND_VERSION = "2.5.12";' in app_js
+    assert 'residual<=3.01' not in app_js
+    assert 'residual_pct_total_land||999)>3.01' not in app_js
+    assert '/static/app.css?v=2.5.12' in index_html
+    assert index_html.count('/static/app.js?v=2.5.12') == 1
+    print("  [OK] Frontend is consistently M2.5.12 and has no active residual-3% save gate")
+
+    print("\\n=======================================================")
+    print("ALL 10 MILESTONE 2.5.12 ACCEPTANCE/REGRESSION TESTS PASSED SUCCESSFULLY!")
+'''
+test = replace_once(test, marker, extra, "extended regression tests")
+TEST.write_text(test, encoding="utf-8")
+
+
+# ------------------------------------------------------------------
+# Documentation: state cleanup without rewriting historical milestones.
+# ------------------------------------------------------------------
+status = STATUS.read_text(encoding="utf-8")
+note = '''\n## Runtime cleanup — active residual 3% target removed\n- The active Residual Optimizer no longer forces `max_residual_pct_total = 3.0` or `strict_residual_cap = True`.\n- The final Adaptive sweep is driven by the **>=70% gross lot-efficiency target**; TRUE residual is informational.\n- Manual recalculation reports `lot_efficiency_target_pct` / `lot_efficiency_met`, not residual-cap acceptance flags.\n- Frontend runtime/version residue is cleaned (`DEVOS_FRONTEND_VERSION = 2.5.12`, CSS cache tag 2.5.12, no active residual-3% save gate).\n- Regression ranking is strict lexicographic and dedicated tests prevent the 3% runtime gate from returning.\n- `_road_specs`, `_pack_standard_blocks`, and `generate_site_alternatives` are intentionally unchanged.\n'''
+if "## Runtime cleanup — active residual 3% target removed" not in status:
+    status += note
+STATUS.write_text(status, encoding="utf-8")
+
+readme = README.read_text(encoding="utf-8")
+anchor = '- **Residual <= 3% hard gate removed:** Residual is now purely informational (`residual_true_area_m2`, `residual_true_pct`) and never causes layout rejection if lot efficiency >= 70%.\n'
+addition = anchor + '- **Runtime cleanup:** no active residual-3% sweep/save/recalculation gate remains; road/block topology and Standard packing are unchanged.\n'
+if anchor in readme and "**Runtime cleanup:** no active residual-3% sweep" not in readme:
+    readme = readme.replace(anchor, addition, 1)
+README.write_text(readme, encoding="utf-8")
+
+print("M2.5.12 cleanup patch applied; protected road/block functions unchanged.")
