@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Development OS — Milestone 2.5.12</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@watergis/maplibre-gl-terradraw@1.16.0/dist/maplibre-gl-terradraw.css" />
+  <link rel="stylesheet" href="/static/app.css?v=2.5.8" />
+</head>
+<body>
+  <header>
+    <div>
+      <div class="eyebrow">DEVELOPMENT OS</div>
+      <h1>Generative Site Planning — Milestone 2.5.12</h1>
+    </div>
+    <div id="apiBadge" class="badge">API checking…</div>
+  </header>
+
+  <main>
+    <section class="map-wrap">
+      <div id="map"></div>
+      <div class="legend">
+        <span><i class="swatch parcel"></i>Batas lahan</span>
+        <span><i class="swatch road"></i>Jalan</span>
+        <span><i class="swatch lot"></i>Kavling Standar</span>
+        <span><i class="swatch residual-lot"></i>Kavling Adaptive (dari lahan sisa)</span>
+        <span><i class="swatch rth"></i>RTH</span>
+        <span><i class="swatch psu"></i>PSU</span>
+        <span><i class="line-swatch drainage"></i>Drainase</span>
+      </div>
+      <div class="map-hint">Gambar/import batas lahan. M2.5.12 membentuk <b>jalan → blok → kavling standar</b> dengan target <b>Efisiensi Kavling ≥ 70%</b>. Ukuran Geometry Settings adalah hard module; lahan sisa dievaluasi sebagai Adaptive.</div>
+    </section>
+
+    <aside>
+      <div class="panel">
+        <label>Nama Project</label>
+        <input id="projectName" value="Site Pekanbaru 01" />
+      </div>
+
+      <div class="panel">
+        <div class="tabs">
+          <button class="tab active" data-tab="draw">Draw</button>
+          <button class="tab" data-tab="manual">Koordinat</button>
+          <button class="tab" data-tab="upload">Import</button>
+        </div>
+
+        <div id="tab-draw" class="tabbody active">
+          <p class="small">Gambar satu polygon menggunakan toolbar peta.</p>
+          <button id="useDrawn" class="primary">Gunakan Polygon</button>
+          <button id="loadSample">Load Sample Pekanbaru</button>
+        </div>
+
+        <div id="tab-manual" class="tabbody">
+          <label>EPSG</label>
+          <input id="manualEpsg" type="number" value="4326" />
+          <label>Urutan koordinat</label>
+          <select id="manualOrder">
+            <option value="latlon">Latitude, Longitude (EPSG:4326)</option>
+            <option value="xy">X/Easting, Y/Northing</option>
+          </select>
+          <label>Koordinat — satu titik per baris</label>
+          <textarea id="manualText" rows="7" placeholder="0.510234, 101.438721\n0.510441, 101.439812\n0.509122, 101.439991\n0.508933, 101.438801"></textarea>
+          <button id="useManual" class="primary">Buat Polygon</button>
+        </div>
+
+        <div id="tab-upload" class="tabbody">
+          <label>File</label>
+          <input id="fileInput" type="file" accept=".kml,.kmz,.geojson,.json,.csv,.zip,.dxf,.dwg" />
+          <label>EPSG sumber (DXF / CSV Easting-Northing)</label>
+          <input id="fileEpsg" type="number" placeholder="contoh: 32647" />
+          <div class="file-help">KML, KMZ, GeoJSON, CSV, SHP dalam ZIP, DXF. DWG: konversi dulu ke DXF.</div>
+          <button id="uploadBtn" class="primary">Import File</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Geometry Settings</h2>
+        <div class="grid3">
+          <div><label>Setback (m)</label><input id="setback" type="number" value="3" step="0.5" min="0" /></div>
+          <div><label>Lebar kavling (m)</label><input id="lotWidth" type="number" value="8" step="0.5" min="1" /></div>
+          <div><label>Dalam kavling (m)</label><input id="lotDepth" type="number" value="15" step="0.5" min="1" /></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Site Planning Settings</h2>
+        <div class="grid2">
+          <div><label>Jalan utama (m)</label><input id="mainRoad" type="number" value="8" step="0.5" min="4" /></div>
+          <div><label>Jalan lingkungan (m)</label><input id="localRoad" type="number" value="6" step="0.5" min="3" /></div>
+          <div><label>Target RTH (%)</label><input id="rthPct" type="number" value="10" step="1" min="0" max="50" /></div>
+          <div><label>Target PSU (%)</label><input id="psuPct" type="number" value="5" step="1" min="0" max="30" /></div>
+          <div><label>Jumlah alternatif</label>
+            <select id="altCount"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+          </div>
+          <div><label>Drainase</label><div class="readonly-chip">2 sisi jalan • otomatis</div></div>
+        </div>
+        <label class="land-opt-master"><input id="landOptimizationToggle" type="checkbox" /> <span><b>Residual Optimizer — TARGET EFISIENSI KAVLING ≥ 70%</b><small>OFF = masterplan asli • ON = lahan sisa diolah menjadi Adaptive; jalan dan Kavling Standar tetap</small></span></label>
+        <button id="generateBtn" class="accent" disabled>Generate Alternatif Layout</button>
+      </div>
+
+      <div class="panel" id="alternativesPanel">
+        <div class="panel-title-row"><h2>Alternatif Layout</h2><span id="altSummary" class="mini-badge">belum ada</span></div>
+        <div id="alternativeCards" class="alt-list"><div class="empty-state">Generate layout untuk melihat beberapa opsi otomatis.</div></div>
+      </div>
+
+      <div class="panel optimizer-panel" id="yieldOptimizerPanel">
+        <div class="panel-title-row"><h2>M2.5.12 — Residual Optimizer</h2><span class="validation neutral" id="yieldStatus">Nonaktif • skenario awal</span></div>
+        <div class="yield-target-card">
+          <b>TARGET UTAMA: EFISIENSI KAVLING ≥ 70% DARI TOTAL LAHAN</b>
+          <small>Kavling Standar, jalan, RTH dan PSU tidak boleh diubah oleh Residual Optimizer. Adaptive hanya boleh berasal dari TRUE residual setelah Standard packing dan wajib lolos saleability validation. Residual bersifat informational.</small>
+        </div>
+        <button id="optimizeYieldBtn" class="yield-btn" disabled>Optimalkan Lahan Sisa (Target ≥ 70% Efisiensi)</button>
+        <div id="yieldResult" class="yield-result empty">Optimalisasi lahan nonaktif. Layout memakai skenario awal.</div>
+      </div>
+
+      <div class="panel" id="manualPanel">
+        <div class="panel-title-row"><h2>Parametric Constraint Siteplan Editor</h2><span id="manualValidation" class="validation neutral">Belum diedit</span></div>
+        <p class="small">Edit hasil generate dengan multi-selection, snapping dan auto-reflow. Jalan/kavling yang digeser dapat memicu penataan ulang objek terkait agar overlap dan frontage tetap terkendali.</p>
+        <button id="manualToggle" class="manual-toggle">Aktifkan Manual Editor</button>
+        <div id="manualControls" class="manual-controls disabled">
+          <div class="tool-strip m23-tools">
+            <button id="toolSelect" class="tool-btn active" title="Pilih / drag objek. Shift+click untuk multi-select">Select / Move</button>
+            <button id="toolBoxSelect" class="tool-btn" title="Drag kotak pada peta untuk memilih banyak objek">Box Select</button>
+            <button id="toolAddRoad" class="tool-btn" title="Klik 2 titik untuk membuat ruas jalan">+ Jalan</button>
+            <button id="toolAddLot" class="tool-btn" title="Klik peta untuk menambah kavling">+ Kavling</button>
+          </div>
+
+          <div class="selection-row"><span>Objek terpilih</span><strong id="editSelection">Belum ada objek dipilih</strong></div>
+
+          <div class="editor-section smart-section">
+            <div class="section-caption">Smart Constraints</div>
+            <div class="smart-toggle-row">
+              <label class="checkline"><input id="autoReflowToggle" type="checkbox" checked /> Parametric Auto-Reflow setelah drag/edit</label>
+              <label class="checkline"><input id="angleSnapToggle" type="checkbox" checked /> Angle Snap</label>
+            </div>
+            <div class="grid2 compact-grid">
+              <div><label>Angle snap (°)</label><input id="angleSnapStep" type="number" value="5" min="1" max="90" step="1" /></div>
+              <div><label>Frontage tolerance (m)</label><input id="frontageTolerance" type="number" value="1.5" min="0.1" max="10" step="0.1" /></div>
+            </div>
+            <div class="edit-grid three">
+              <button id="reflowLocalBtn" disabled>Reflow Local</button>
+              <button id="repackBlockBtn" disabled>Repack Block</button>
+              <button id="validateSmartBtn" disabled>Validate</button>
+            </div>
+            <div class="edit-grid three">
+              <button id="selectLinkedBtn" disabled>Select Linked Lots</button>
+              <button id="duplicateSelectionBtn" disabled>Duplicate Selection</button>
+              <button id="deleteSelectionBtn" class="danger" disabled>Delete Selection</button>
+            </div>
+            <div id="smartStatus" class="small editor-note">Pilih jalan/kavling. Shift+click atau Box Select untuk multi-selection.</div>
+          </div>
+
+          <div class="editor-section">
+            <div class="section-caption">Transformasi objek</div>
+            <div class="grid2 compact-grid">
+              <div><label>Angle / orientasi (°)</label><input id="objectAngle" type="number" value="0" step="0.5" min="-360" max="360" /></div>
+              <div><label>Step geser (m)</label><input id="nudgeStep" type="number" value="0.5" min="0.1" step="0.1" /></div>
+            </div>
+            <div class="edit-grid three">
+              <button id="applyAngleBtn" disabled>Set Angle</button>
+              <button id="rotateLeftBtn" disabled>↺ -5°</button>
+              <button id="rotateRightBtn" disabled>↻ +5°</button>
+            </div>
+            <div class="nudge-pad wide">
+              <button id="nudgeUp" title="Geser utara">↑</button>
+              <button id="nudgeLeft" title="Geser barat">←</button>
+              <button id="nudgeDown" title="Geser selatan">↓</button>
+              <button id="nudgeRight" title="Geser timur">→</button>
+            </div>
+          </div>
+
+          <div id="roadEditor" class="editor-section object-editor disabled-section">
+            <div class="section-caption">Road Editor</div>
+            <div class="grid2 compact-grid">
+              <div><label>Lebar jalan (m)</label><input id="roadWidthEdit" type="number" value="6" step="0.5" min="2" max="40" /></div>
+              <div><label>Tipe</label><select id="roadKindEdit"><option value="main">Utama</option><option value="local" selected>Lingkungan</option></select></div>
+            </div>
+            <div class="edit-grid three">
+              <button id="applyRoadBtn" disabled>Apply Jalan</button>
+              <button id="duplicateRoadBtn" disabled>Duplikat</button>
+              <button id="deleteRoadBtn" class="danger" disabled>Hapus Ruas</button>
+            </div>
+            <div class="small editor-note">Untuk mengubah panjang/arah secara visual: pilih jalan lalu drag bulatan endpoint di peta. Drainase dibangun ulang otomatis.</div>
+          </div>
+
+          <div id="lotEditor" class="editor-section object-editor disabled-section">
+            <div class="section-caption">Kavling Editor</div>
+            <div class="grid2 compact-grid">
+              <div><label>Lebar kavling (m)</label><input id="lotWidthEdit" type="number" value="8" step="0.5" min="1" /></div>
+              <div><label>Dalam kavling (m)</label><input id="lotDepthEdit" type="number" value="15" step="0.5" min="1" /></div>
+            </div>
+            <div class="edit-grid three">
+              <button id="applyLotSizeBtn" disabled>Apply Ukuran</button>
+              <button id="duplicateBtn" disabled>Duplikat</button>
+              <button id="deleteBtn" class="danger" disabled>Hapus</button>
+            </div>
+          </div>
+
+          <div class="editor-section">
+            <div class="section-caption">Orientasi seluruh siteplan</div>
+            <div class="inline-apply">
+              <input id="layoutAngleEdit" type="number" value="0" step="0.5" min="-360" max="360" />
+              <button id="applyLayoutAngleBtn">Apply Layout Angle</button>
+            </div>
+            <div class="small">Memutar jalan, kavling, RTH, PSU, dan drainase bersama-sama terhadap pusat buildable area. Batas tanah tidak ikut diputar.</div>
+          </div>
+
+          <div class="edit-grid four">
+            <button id="undoBtn" disabled>Undo</button>
+            <button id="redoBtn" disabled>Redo</button>
+            <button id="resetManualBtn" disabled>Reset Generate</button>
+            <button id="recalcBtn" disabled>Hitung Ulang</button>
+          </div>
+          <div class="keyboard-help">Keyboard: Shift+click = multi-select • drag box = box select • panah = geser group • Delete = hapus pilihan • Ctrl+Z = undo • Esc = kembali ke Select</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Site Statistics — Opsi Terpilih</h2>
+        <div class="stats">
+          <div><span>Luas tanah</span><strong id="parcelArea">—</strong></div>
+          <div><span>Buildable</span><strong id="buildArea">—</strong></div>
+          <div><span>Jumlah kavling</span><strong id="lotCount">—</strong></div>
+          <div><span>Kavling Standard</span><strong id="standardLotCount">—</strong></div>
+          <div><span>Kavling Adaptive</span><strong id="adaptiveLotCount">—</strong></div>
+          <div><span>Efisiensi kavling</span><strong id="efficiency">—</strong></div>
+          <div><span>Luas jalan</span><strong id="roadArea">—</strong></div>
+          <div><span>Panjang jalan</span><strong id="roadLength">—</strong></div>
+          <div><span>RTH</span><strong id="rthArea">—</strong></div>
+          <div><span>PSU</span><strong id="psuArea">—</strong></div>
+          <div><span>Drainase</span><strong id="drainageLength">—</strong></div>
+          <div><span>Orientasi</span><strong id="orientation">—</strong></div>
+          <div><span>CRS hitung</span><strong id="utm">—</strong></div>
+          <div><span>Sisa area</span><strong id="unusedArea">—</strong></div>
+          <div><span>Land utilization</span><strong id="landUtilization">—</strong></div>
+          <div><span>Residual / total lahan</span><strong id="residualRatio">—</strong></div>
+          <div><span>Road efficiency</span><strong id="roadEfficiency">—</strong></div>
+          <div><span>Block regularity</span><strong id="blockRegularity">—</strong></div>
+          <div><span>Road connectivity</span><strong id="roadConnectivity">—</strong></div>
+        </div>
+      </div>
+
+      <div class="panel actions">
+        <button id="saveBtn" class="save" disabled>Simpan Opsi Terpilih</button>
+        <div id="message" class="message">Belum ada polygon.</div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@watergis/maplibre-gl-terradraw@1.16.0/dist/maplibre-gl-terradraw.umd.js"></script>
+  <script src="/static/app.js?v=2.5.12"></script>
+</body>
+</html>
