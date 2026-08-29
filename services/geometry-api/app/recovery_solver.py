@@ -24,7 +24,7 @@ STAGE_DEFINITIONS = [
     ("facility", "RTH / PSU Placement Recovery"),
     ("adaptive", "Adaptive Recovery"),
     ("feasibility", "Feasibility Analysis"),
-    ("mutation", "Topology Mutation Loop"),
+    ("mutation", "Structural Corridor Mutation Loop"),
 ]
 
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -183,6 +183,7 @@ def _candidate_summary(alt: dict[str, Any], stage_id: str, strategy: str | None 
         "residual_pct": round(float(s.get("residual_pct_total_land", s.get("residual_true_pct", 0.0)) or 0.0), 2),
         "angle_deg": round(float(alt.get("angle_deg", 0.0) or 0.0), 2),
         "pattern": alt.get("pattern"),
+        "structural": copy.deepcopy(alt.get("solver_params") or {}),
         "timestamp": time.time(),
     }
 
@@ -318,7 +319,141 @@ def _stage_specs(core: dict[str, Any], req: Any, stage_id: str) -> list[dict[str
     return specs
 
 
+def _structural_road_specs(rot, req: Any, specdef: dict[str, Any]):
+    """Generate structural road alternatives without changing STANDARD dimensions.
+
+    Search variables intentionally operate on the road/block system only:
+    corridor count/spacing, short-branch count/length, single/dual spine,
+    double-loaded coverage, road termination, perimeter-assisted access and
+    block-depth combinations. Geometry Settings remain the only source of
+    STANDARD lot width/depth.
+    """
+    minx, miny, maxx, maxy = rot.bounds
+    width = max(0.0, maxx - minx)
+    height = max(0.0, maxy - miny)
+    lot_d = float(req.lot_depth_m)
+    main_w = float(req.main_road_width_m)
+    local_w = float(req.local_road_width_m)
+
+    requested_count = max(1, min(16, int(specdef.get("corridor_count", 1) or 1)))
+    nominal_spacing = max(lot_d, float(specdef.get("corridor_spacing_m", 2.0 * lot_d) or 2.0 * lot_d))
+    combo_raw = specdef.get("block_depth_combo_m") or [nominal_spacing]
+    combo = [max(lot_d, float(x)) for x in combo_raw if float(x) > 0.0] or [nominal_spacing]
+    phase = float(specdef.get("shift_m", 0.0) or 0.0)
+
+    # Reduce corridor count only when the requested structural system cannot fit.
+    # We reserve one lot-depth at each outer edge so edge frontage can still pack.
+    corridor_count = requested_count
+    widths = []
+    gaps = []
+    while corridor_count >= 1:
+        main_i = corridor_count // 2 if bool(specdef.get("main_corridor", True)) else -1
+        widths = [main_w if i == main_i else local_w for i in range(corridor_count)]
+        gaps = [combo[i % len(combo)] for i in range(max(0, corridor_count - 1))]
+        required = 2.0 * lot_d + sum(widths) + sum(gaps)
+        if required <= height + 1e-6 or corridor_count == 1:
+            break
+        corridor_count -= 1
+
+    required = 2.0 * lot_d + sum(widths) + sum(gaps)
+    slack = max(0.0, height - required)
+    # Phase is bounded to the available edge slack; it shifts the entire corridor family.
+    edge_bottom = slack / 2.0 + max(-slack / 2.0, min(slack / 2.0, phase))
+    cursor = miny + edge_bottom + lot_d
+    ys = []
+    for i, rw in enumerate(widths):
+        center = cursor + rw / 2.0
+        ys.append((center, rw, "main" if rw == main_w and i == corridor_count // 2 and bool(specdef.get("main_corridor", True)) else "local"))
+        cursor = center + rw / 2.0
+        if i < len(gaps):
+            cursor += gaps[i]
+
+    spine_count = max(0, min(2, int(specdef.get("spine_count", 0) or 0)))
+    center_ratio = max(0.15, min(0.85, float(specdef.get("spine_ratio", 0.5) or 0.5)))
+    spread = max(0.12, min(0.60, float(specdef.get("spine_spread", 0.34) or 0.34)))
+    if spine_count == 0:
+        spine_xs = []
+    elif spine_count == 1:
+        spine_xs = [minx + center_ratio * width]
+    else:
+        mid = minx + center_ratio * width
+        half = spread * width / 2.0
+        spine_xs = [max(minx + 0.10 * width, mid - half), min(maxx - 0.10 * width, mid + half)]
+        spine_xs = sorted(spine_xs)
+
+    specs = []
+    def add_h(y, rw, kind, x1, x2, role="corridor"):
+        if x2 - x1 <= max(2.0, float(req.lot_width_m)):
+            return
+        specs.append({"axis": "h", "coord": y, "width": rw, "kind": kind,
+                      "role": role, "line": LineString([(x1, y), (x2, y)])})
+
+    def add_v(x, rw, kind, role="spine"):
+        specs.append({"axis": "v", "coord": x, "width": rw, "kind": kind,
+                      "role": role, "line": LineString([(x, miny - 5.0), (x, maxy + 5.0)])})
+
+    for x in spine_xs:
+        add_v(x, main_w, "main", "dual-spine" if spine_count == 2 else "spine")
+
+    coverage = max(0.0, min(1.0, float(specdef.get("double_loaded_coverage", 1.0) or 0.0)))
+    full_target = max(0, min(corridor_count, int(round(corridor_count * coverage))))
+    # Spread full double-loaded corridors across the site instead of clustering them.
+    if full_target >= corridor_count:
+        full_indices = set(range(corridor_count))
+    elif full_target <= 0:
+        full_indices = set()
+    else:
+        full_indices = {int(round(i * (corridor_count - 1) / max(1, full_target - 1))) for i in range(full_target)}
+
+    branch_budget = max(0, min(corridor_count, int(specdef.get("short_branch_count", corridor_count) or 0)))
+    branch_ratio = max(0.15, min(1.0, float(specdef.get("short_branch_length_ratio", 0.55) or 0.55)))
+    termination = str(specdef.get("road_termination", "alternating-spine"))
+    branches_used = 0
+
+    for i, (y, rw, kind) in enumerate(ys):
+        if termination == "boundary" or i in full_indices or not spine_xs:
+            add_h(y, rw, kind, minx - 5.0, maxx + 5.0, "double-loaded")
+            continue
+        if branches_used >= branch_budget:
+            continue
+        branches_used += 1
+
+        if spine_count == 2 and termination == "dual-spine" and i % 3 == 1:
+            add_h(y, rw, kind, spine_xs[0], spine_xs[1], "dual-spine-link")
+            continue
+
+        side_left = (i + int(specdef.get("termination_phase", 0) or 0)) % 2 == 0
+        anchor = spine_xs[0] if side_left else spine_xs[-1]
+        if termination == "staggered" and spine_count == 2 and i % 4 == 2:
+            anchor = spine_xs[1] if side_left else spine_xs[0]
+            side_left = not side_left
+
+        available = (anchor - minx) if side_left else (maxx - anchor)
+        length = max(float(req.lot_depth_m) + float(req.lot_width_m), available * branch_ratio)
+        if side_left:
+            add_h(y, rw, kind, max(minx - 5.0, anchor - length), anchor, "short-branch")
+        else:
+            add_h(y, rw, kind, anchor, min(maxx + 5.0, anchor + length), "short-branch")
+
+    if bool(specdef.get("perimeter_assisted_access", False)):
+        sides = str(specdef.get("perimeter_access_sides", "both"))
+        inset = lot_d + local_w / 2.0
+        perimeter_xs = []
+        if sides in ("left", "both"):
+            perimeter_xs.append(minx + inset)
+        if sides in ("right", "both"):
+            perimeter_xs.append(maxx - inset)
+        for x in perimeter_xs:
+            if all(abs(x - sx) > max(main_w, local_w) * 1.5 for sx in spine_xs):
+                add_v(x, local_w, "local", "perimeter-assisted")
+
+    return specs
+
+
 def _road_specs_for(core: dict[str, Any], rot, req: Any, specdef: dict[str, Any]):
+    if bool(specdef.get("structural_mode", False)):
+        return _structural_road_specs(rot, req, specdef)
+
     specs = core["_road_specs"](
         rot,
         specdef["pattern"],
@@ -358,7 +493,7 @@ def _road_specs_for(core: dict[str, Any], rot, req: Any, specdef: dict[str, Any]
                 ss["line"] = LineString([(spine_x, y), (maxx + 5.0, y)])
             else:
                 ss["line"] = LineString([(minx - 5.0, y), (spine_x, y)])
-        else:  # hybrid: alternate full roads and short branches
+        else:
             if h_index % 2 == 1:
                 if (h_index // 2) % 2 == 0:
                     ss["line"] = LineString([(spine_x, y), (maxx + 5.0, y)])
@@ -479,6 +614,12 @@ def _evaluate_spec(core: dict[str, Any], req: Any, specdef: dict[str, Any], stag
         "name": specdef["name"],
         "pattern": specdef.get("pattern", "parallel"),
         "angle_deg": round(angle, 2),
+        "solver_params": {k: copy.deepcopy(specdef.get(k)) for k in (
+            "corridor_count", "corridor_spacing_m", "block_depth_combo_m",
+            "short_branch_count", "short_branch_length_ratio", "spine_count",
+            "spine_ratio", "spine_spread", "double_loaded_coverage",
+            "road_termination", "perimeter_assisted_access", "perimeter_access_sides",
+        ) if k in specdef},
         "buildable": core["_mapping_wgs"](rot, angle, origin, epsg),
         "roads": core["_mapping_wgs"](roads, angle, origin, epsg) if not roads.is_empty else None,
         "road_segments": road_segments,
@@ -689,47 +830,97 @@ def _cancel_requested(job_id: str) -> bool:
 
 
 def _mutation_specs(core: dict[str, Any], req: Any, round_no: int, batch_size: int = 12) -> list[dict[str, Any]]:
-    """Deterministic low-discrepancy topology mutations for continued search.
+    """Deterministic structural search over road/block topology.
 
-    There is intentionally no random seed. Each round explores a new combination
-    of orientation, road phase, spine position, topology and facility placement
-    while keeping Geometry Settings and RTH/PSU percentages fixed.
+    Unlike the earlier angle/phase-only loop, every round also explores:
+    corridor count, corridor spacing, short branch count/length, single/dual
+    spine, double-loaded coverage, road termination, perimeter access and
+    block-depth combinations. No variable changes STANDARD width/depth.
     """
     geom = core["ensure_polygon"](req.geometry)
     epsg = core["utm_epsg_for_geometry"](geom)
     parcel = core["project_geom"](geom, 4326, epsg)
     buildable = core["_polygonal_only"](parcel.buffer(-req.setback_m, join_style=2))
     base = float(core["_dominant_angle_deg"](buildable))
+    minx, miny, maxx, maxy = buildable.bounds
+    span = max(1.0, maxy - miny)
+    d = float(req.lot_depth_m)
+    lw = float(req.local_road_width_m)
+
+    ideal = max(1, int((max(0.0, span - 2.0 * d) + lw) // max(1.0, 2.0 * d + lw)))
+    corridor_options = sorted({max(1, ideal + k) for k in (-2, -1, 0, 1, 2, 3)})
+    spacing_options = [d, 2.0 * d, 3.0 * d, 4.0 * d]
+    block_combos = [
+        [2.0 * d],
+        [d, 2.0 * d],
+        [2.0 * d, 3.0 * d],
+        [2.0 * d, 4.0 * d],
+        [d, 2.0 * d, 2.0 * d],
+    ]
+    spine_options = [0, 1, 2]
+    coverage_options = [0.50, 0.67, 0.80, 1.00]
+    branch_length_options = [0.35, 0.50, 0.70, 0.90]
+    terminations = ["boundary", "alternating-spine", "staggered", "dual-spine"]
     facility_pairs = [
         ("top", "bottom"), ("bottom", "top"), ("left", "right"),
         ("right", "left"), ("top", "right"), ("left", "bottom"),
     ]
+
     out = []
     for j in range(batch_size):
         n = round_no * batch_size + j + 1
+        # Coprime/irrational stepping prevents short cycles across the product space.
         angle_frac = (n * 0.6180339887498949) % 1.0
         phase_frac = (n * 0.7548776662466927) % 1.0
         spine_frac = (n * 0.4142135623730950) % 1.0
         offset = angle_frac * 30.0 - 15.0
-        shift = (phase_frac * 2.0 - 1.0) * float(req.lot_depth_m)
-        spine_ratio = 0.12 + spine_frac * 0.76
+        angle = (base + offset + (90.0 if (n // 5) % 2 else 0.0)) % 180.0
+
+        corridor_count = corridor_options[n % len(corridor_options)]
+        spacing = spacing_options[(n * 3) % len(spacing_options)]
+        combo = block_combos[(n * 2 + round_no) % len(block_combos)]
+        spine_count = spine_options[(n + round_no) % len(spine_options)]
+        coverage = coverage_options[(n * 3 + round_no) % len(coverage_options)]
+        branch_length = branch_length_options[(n * 5 + round_no) % len(branch_length_options)]
+        termination = terminations[(n * 7 + round_no) % len(terminations)]
+        if spine_count == 0 and termination != "boundary":
+            termination = "boundary"
+        if termination == "dual-spine" and spine_count < 2:
+            spine_count = 2
+
+        branch_options = [0, max(1, corridor_count // 3), max(1, corridor_count // 2), corridor_count]
+        branch_count = branch_options[(n * 11 + round_no) % len(branch_options)]
         rth_side, psu_side = facility_pairs[n % len(facility_pairs)]
-        mode = n % 4
-        if mode == 0:
-            pattern, topology = "parallel", "base"
-        elif mode == 1:
-            pattern, topology = "spine", "short-branches"
-        elif mode == 2:
-            pattern, topology = "spine", "hybrid"
-        else:
-            pattern, topology = "parallel", "base"
-        angle = base + offset + (90.0 if (n // 4) % 2 else 0.0)
+        perimeter = ((n + round_no) % 3 == 0)
+        perimeter_sides = ("left", "right", "both")[(n * 5 + round_no) % 3]
+        phase_limit = max(0.0, min(d, max(0.0, span - (2.0 * d + corridor_count * lw)) / 2.0))
+        shift = (phase_frac * 2.0 - 1.0) * phase_limit
+        spine_ratio = 0.20 + spine_frac * 0.60
+        spine_spread = 0.22 + ((n * 0.3027756377) % 1.0) * 0.34
+
+        label = (
+            f"Structural R{round_no+1}-{j+1} • C{corridor_count} • gap {spacing:.0f}m • "
+            f"spine {spine_count} • branch {branch_count}@{branch_length:.2f} • DL {coverage:.0%} • {termination}"
+        )
         out.append({
-            "name": f"Mutation R{round_no+1}-{j+1} • {topology}",
-            "pattern": pattern,
-            "angle": angle % 180.0,
-            "topology": topology,
+            "name": label,
+            "pattern": "parallel" if spine_count == 0 else "spine",
+            "angle": angle,
+            "topology": "structural",
+            "structural_mode": True,
+            "corridor_count": corridor_count,
+            "corridor_spacing_m": spacing,
+            "block_depth_combo_m": combo,
+            "short_branch_count": branch_count,
+            "short_branch_length_ratio": branch_length,
+            "spine_count": spine_count,
             "spine_ratio": spine_ratio,
+            "spine_spread": spine_spread,
+            "double_loaded_coverage": coverage,
+            "road_termination": termination,
+            "termination_phase": n % 2,
+            "perimeter_assisted_access": perimeter,
+            "perimeter_access_sides": perimeter_sides,
             "shift_m": shift,
             "rth_side": rth_side,
             "psu_side": psu_side,
@@ -746,7 +937,7 @@ def _run_mutation_loop(core: dict[str, Any], req: Any, pool: list[dict[str, Any]
     mutating topology. The UI exposes a Cancel button so the operator controls
     the search budget explicitly.
     """
-    _mark_stage(job_id, "mutation", "running", "Upper bound masih >=70% • mutation search terus berjalan", total=0)
+    _mark_stage(job_id, "mutation", "running", "Upper bound masih >=70% • structural corridor search terus berjalan", total=0)
     tested = 0
     round_no = 0
     while not _cancel_requested(job_id):
@@ -804,8 +995,8 @@ def _run_mutation_loop(core: dict[str, Any], req: Any, pool: list[dict[str, Any]
             stage = _stage_ref(job, "mutation")
             stage["candidate_total"] = 0
             stage["candidates_tested"] = tested
-            stage["message"] = f"Round {round_no} selesai • {tested} mutation tested • best {best:.2f}% • lanjut mencari"
-            job["message"] = f"Solver belum konvergen: best {best:.2f}% <70% • mutation round {round_no+1} berjalan"
+            stage["message"] = f"Round {round_no} selesai • {tested} structural candidates • best {best:.2f}% • lanjut mencari"
+            job["message"] = f"Solver belum konvergen: best {best:.2f}% <70% • structural corridor round {round_no+1} berjalan"
             job["feasibility"] = diagnosis
         _with_job(job_id, round_update)
         time.sleep(0.05)

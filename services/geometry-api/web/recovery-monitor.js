@@ -50,6 +50,8 @@ function renderSolverCurrent(candidate){
   const root=solverEl('solverCurrent'); if(!root)return;
   if(!candidate){root.innerHTML='<div class="empty-state">Belum ada candidate aktif.</div>';return;}
   const status=candidate.pass?'PASS':'REJECT';
+  const sp=candidate.structural||{};
+  const structural=Object.keys(sp).length?`<div class="wide structural-detail"><span>Structural topology</span><b>C${sp.corridor_count??'—'} • gap ${solverNum(sp.corridor_spacing_m,0)}m • spine ${sp.spine_count??'—'} • branch ${sp.short_branch_count??'—'} @ ${solverNum(sp.short_branch_length_ratio,2)} • DL ${solverNum(Number(sp.double_loaded_coverage||0)*100,0)}% • ${sp.road_termination||'—'}${sp.perimeter_assisted_access?' • perimeter access':''}</b><small>Block depth: ${(sp.block_depth_combo_m||[]).map(x=>solverNum(x,0)+'m').join(' / ')||'—'}</small></div>`:'';
   root.innerHTML=`<div class="solver-current-grid">
     <div class="wide"><span>Strategy</span><b>${candidate.strategy||candidate.name||'—'}</b></div>
     <div><span>Stage</span><b>${candidate.stage||'—'}</b></div>
@@ -58,6 +60,7 @@ function renderSolverCurrent(candidate){
     <div><span>Standard</span><b>${candidate.standard_count??'—'}</b></div>
     <div><span>Adaptive</span><b>${candidate.adaptive_count??0}</b></div>
     <div><span>Residual</span><b>${solverNum(candidate.residual_pct,2)}%</b></div>
+    ${structural}
   </div>`;
 }
 

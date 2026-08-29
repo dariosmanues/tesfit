@@ -26,3 +26,17 @@ The existing `generate_site_alternatives`, `_road_specs`, and `_pack_standard_bl
 
 ## Continuous mutation rule
 If Feasibility Analysis still has a conservative theoretical upper bound >=70%, the solver does **not** finish with a sub-70 result. It enters `Topology Mutation Loop` and keeps testing deterministic new topology/orientation/phase/facility combinations until a valid >=70% candidate is found or the user explicitly presses **Stop Recovery Solver**. Candidate <70% remains REJECT throughout.
+
+## Structural Corridor Recovery upgrade
+The continuing mutation loop now changes the road/block structure rather than only angle/phase. Search dimensions include:
+- corridor count;
+- clear spacing between corridors;
+- short-branch count and branch length;
+- zero/single/dual spine;
+- double-loaded corridor coverage;
+- road termination strategy (boundary, alternating-spine, staggered, dual-spine);
+- perimeter-assisted access;
+- alternating block-depth combinations.
+
+These variables never change Geometry Settings. STANDARD remains exact width x depth from `geometry_settings`; Adaptive remains `residual_only`.
+The live Candidate Aktif panel exposes the structural parameters being evaluated.
