@@ -7,7 +7,6 @@ FILES = [
     ROOT / "services/geometry-api/web/app.js",
     ROOT / "services/geometry-api/web/index.html",
     ROOT / "services/geometry-api/web/recovery-monitor.js",
-    ROOT / "services/geometry-api/test_m2513_recovery_solver.py",
 ]
 
 for path in FILES:
@@ -15,6 +14,12 @@ for path in FILES:
     if "2.5.13" not in text:
         raise RuntimeError(f"expected 2.5.13 marker not found in {path}")
     path.write_text(text.replace("2.5.13", "2.5.14"), encoding="utf-8")
+
+# Version-specific regression assertions must follow the current product version.
+for path in (ROOT / "services/geometry-api").glob("test_*.py"):
+    text = path.read_text(encoding="utf-8")
+    if "2.5.13" in text:
+        path.write_text(text.replace("2.5.13", "2.5.14"), encoding="utf-8")
 
 status = ROOT / "MILESTONE2_5_14_STATUS.md"
 status.write_text(
