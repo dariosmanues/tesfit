@@ -237,3 +237,17 @@ window.addEventListener('load',()=>{
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, {once:true});
   else load();
 })();
+
+
+// Development OS — Spatial KNN price recommendation loader.
+(() => {
+  const load = () => {
+    if (document.querySelector('script[data-devos-market-knn]')) return;
+    const s = document.createElement('script');
+    s.src = '/static/market-knn.js?v=2.5.14-knn1';
+    s.dataset.devosMarketKnn = '1';
+    document.body.appendChild(s);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, {once:true});
+  else load();
+})();
