@@ -1,0 +1,64 @@
+name: Spatial KNN price verify
+
+on:
+  push:
+    branches: [feat/knn-house-price-recommendation]
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-activate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Activate Spatial KNN loader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('services/geometry-api/web/recovery-monitor.js')
+          text = p.read_text(encoding='utf-8')
+          marker = '// Development OS — Spatial KNN price recommendation loader.'
+          if marker not in text:
+              text += '''\n\n// Development OS — Spatial KNN price recommendation loader.\n(() => {\n  const load = () => {\n    if (document.querySelector('script[data-devos-market-knn]')) return;\n    const s = document.createElement('script');\n    s.src = '/static/market-knn.js?v=2.5.14-knn1';\n    s.dataset.devosMarketKnn = '1';\n    document.body.appendChild(s);\n  };\n  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, {once:true});\n  else load();\n})();\n'''
+              p.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate joined housing dataset
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, json
+          root = Path('services/geometry-api/web/data')
+          parts = [root / f'pekanbaru_housing_market.part{i:02d}.b64' for i in range(1,8)]
+          assert all(p.exists() for p in parts)
+          b64 = ''.join(p.read_text(encoding='utf-8').strip() for p in parts)
+          payload = json.loads(gzip.decompress(base64.b64decode(b64, validate=True)))
+          assert len(payload['records']) == 519
+          assert payload['metadata']['mapped_count'] == 518
+          assert payload['metadata']['unmapped_count'] == 1
+          assert sum(len(r.get('types') or []) for r in payload['records']) > 0
+          print('DATASET OK:', len(payload['records']))
+          PY
+
+      - name: JavaScript syntax and KNN regression tests
+        run: |
+          node --check services/geometry-api/web/market-knn.js
+          node --check services/geometry-api/web/recovery-monitor.js
+          node services/geometry-api/web/market-knn.test.js
+
+      - name: Commit verified activation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/knn-price-verify-once.yml
+          git add services/geometry-api/web/recovery-monitor.js
+          git commit -m "feat: activate Spatial KNN house price recommendation"
+          git push origin HEAD:feat/knn-house-price-recommendation
