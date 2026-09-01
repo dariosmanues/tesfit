@@ -19,6 +19,8 @@
   const DEFAULT_K = 7;
   const MAX_K = 15;
   const MIN_DISTANCE_KM = 0.25;
+  const MAX_NEIGHBOR_WEIGHT_SHARE = 0.35;
+  const PRICE_OUTLIER_WEIGHT_FACTOR = 0.35;
 
   let dataset = null;
   let ready = false;
@@ -26,6 +28,7 @@
   let lastKey = '';
 
   const el = id => typeof document === 'undefined' ? null : document.getElementById(id);
+  const esc = value => String(value ?? '—').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const money = value => {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? `Rp${Math.round(n).toLocaleString('id-ID')}` : '—';
@@ -146,6 +149,34 @@
     return valid[Math.floor((valid.length-1)/2)];
   }
 
+  function capWeightShares(weights,maxShare=MAX_NEIGHBOR_WEIGHT_SHARE){
+    if(!Array.isArray(weights) || !weights.length) return [];
+    const positive = weights.map(w => Number.isFinite(Number(w)) && Number(w) > 0 ? Number(w) : 0);
+    const total = positive.reduce((a,b)=>a+b,0);
+    if(!(total > 0)) return positive.map(()=>1/positive.length);
+    let shares = positive.map(w=>w/total);
+    const cap = Math.max(Number(maxShare)||MAX_NEIGHBOR_WEIGHT_SHARE,1/shares.length);
+    for(let iteration=0; iteration<12; iteration++){
+      const over = shares.map((v,i)=>v>cap+1e-12?i:-1).filter(i=>i>=0);
+      if(!over.length) break;
+      let excess = 0;
+      const overSet = new Set(over);
+      for(const i of over){ excess += shares[i]-cap; shares[i]=cap; }
+      const under = shares.map((v,i)=>!overSet.has(i)&&v<cap-1e-12?i:-1).filter(i=>i>=0);
+      if(!under.length) break;
+      const underTotal = under.reduce((sum,i)=>sum+shares[i],0);
+      for(const i of under){
+        const room = cap-shares[i];
+        const add = underTotal>0 ? excess*(shares[i]/underTotal) : excess/under.length;
+        shares[i] += Math.min(room,add);
+      }
+      const sum = shares.reduce((a,b)=>a+b,0);
+      if(sum>0) shares = shares.map(v=>v/sum);
+    }
+    const sum = shares.reduce((a,b)=>a+b,0);
+    return sum>0 ? shares.map(v=>v/sum) : shares;
+  }
+
   function spatialKnnEstimate(projects,category='all',targetLotArea=0,requestedK=DEFAULT_K){
     const kWanted = Math.max(1,Math.min(MAX_K,Math.round(Number(requestedK)||DEFAULT_K)));
     const samples = [];
@@ -168,7 +199,6 @@
     if(!samples.length) return null;
 
     const neighbors = samples.slice(0,Math.min(kWanted,samples.length));
-    let weightedPrice = 0, totalWeight = 0;
     const target = Number(targetLotArea);
     for(const n of neighbors){
       const distanceWeight = 1 / Math.max(n.distanceKm,MIN_DISTANCE_KM)**2;
@@ -177,19 +207,42 @@
         const mismatch = Math.abs(Math.log(n.landArea/target));
         lotSimilarity = 1 / (1 + 2*mismatch);
       }
-      n.weight = distanceWeight * lotSimilarity;
-      weightedPrice += n.price * n.weight;
-      totalWeight += n.weight;
+      n.distanceWeight = distanceWeight;
+      n.lotSimilarity = lotSimilarity;
+      n.rawWeight = distanceWeight * lotSimilarity;
     }
-    if(!(totalWeight > 0)) return null;
 
-    const predictedPrice = weightedPrice / totalWeight;
     const prices = neighbors.map(n=>n.price).sort((a,b)=>a-b);
+    const minPrice = prices[0] ?? null;
+    const maxPrice = prices[prices.length-1] ?? null;
     const p25 = percentile(prices,.25);
     const median = percentile(prices,.50);
     const p75 = percentile(prices,.75);
+    const iqr = Number.isFinite(p75) && Number.isFinite(p25) ? p75-p25 : 0;
+    const lowerFence = Number.isFinite(p25) ? p25-1.5*iqr : -Infinity;
+    const upperFence = Number.isFinite(p75) ? p75+1.5*iqr : Infinity;
+
+    const rawTotalWeight = neighbors.reduce((sum,n)=>sum+n.rawWeight,0);
+    if(!(rawTotalWeight > 0)) return null;
+    const rawPredictedPrice = neighbors.reduce((sum,n)=>sum+n.price*n.rawWeight,0)/rawTotalWeight;
+
+    const robustWeights = neighbors.map(n=>{
+      n.isPriceOutlier = iqr>0 && (n.price<lowerFence || n.price>upperFence);
+      n.outlierFactor = n.isPriceOutlier ? PRICE_OUTLIER_WEIGHT_FACTOR : 1;
+      n.robustWeight = n.rawWeight*n.outlierFactor;
+      return n.robustWeight;
+    });
+    const finalShares = capWeightShares(robustWeights,MAX_NEIGHBOR_WEIGHT_SHARE);
+    for(let i=0;i<neighbors.length;i++){
+      neighbors[i].rawWeightShare = neighbors[i].rawWeight/rawTotalWeight;
+      neighbors[i].finalWeightShare = finalShares[i] ?? 0;
+    }
+
+    const predictedPrice = neighbors.reduce((sum,n)=>sum+n.price*n.finalWeightShare,0);
     const maxDistanceKm = Math.max(...neighbors.map(n=>n.distanceKm));
-    const meanDistanceKm = neighbors.reduce((s,n)=>s+n.distanceKm,0)/neighbors.length;
+    const meanDistanceKm = neighbors.reduce((sum,n)=>sum+n.distanceKm,0)/neighbors.length;
+    const maxWeightShare = Math.max(...neighbors.map(n=>n.finalWeightShare));
+    const outlierCount = neighbors.filter(n=>n.isPriceOutlier).length;
     let coverage = 'TERBATAS';
     if(neighbors.length >= 7 && maxDistanceKm <= 5) coverage = 'KUAT';
     else if(neighbors.length >= 5 && maxDistanceKm <= 7) coverage = 'CUKUP';
@@ -198,12 +251,21 @@
       requestedK:kWanted,
       k:neighbors.length,
       predictedPrice,
+      rawPredictedPrice,
       conservativePrice:p25,
       medianPrice:median,
+      minPrice,
+      maxPrice,
       p25,
       p75,
+      iqr,
+      lowerFence,
+      upperFence,
       maxDistanceKm,
       meanDistanceKm,
+      maxWeightShare,
+      outlierCount,
+      robustnessApplied:outlierCount>0 || Math.abs(predictedPrice-rawPredictedPrice)>1,
       coverage,
       neighbors,
     };
@@ -231,6 +293,12 @@
       .stats .knn-price-card strong{color:#126a43}
       .stats .knn-basis-card{border-color:#d7dce4;background:#fafbfc}
       #marketKnnStatus{margin-top:8px;padding:8px;border:1px solid #dfe5ec;border-radius:8px;background:#fafbfc;font-size:10.5px;line-height:1.45;color:#475467}
+      #marketKnnAudit{margin-top:8px;border:1px solid #dfe5ec;border-radius:8px;background:#fff;padding:7px 9px;font-size:10.5px}
+      #marketKnnAudit summary{cursor:pointer;font-weight:800;color:#344054}
+      #marketKnnAudit table{width:100%;border-collapse:collapse;margin-top:7px;font-size:9.8px}
+      #marketKnnAudit th,#marketKnnAudit td{padding:4px;border-bottom:1px solid #eaecf0;text-align:left;vertical-align:top}
+      #marketKnnAudit td.num{text-align:right;white-space:nowrap}
+      #marketKnnAudit .outlier{color:#b42318;font-weight:800}
     `;
     document.head.appendChild(style);
   }
@@ -240,9 +308,11 @@
     const stats = el('parcelArea')?.closest('.stats');
     if(!stats) return;
     const cards = [
-      ['Rekomendasi harga rumah (Spatial KNN)','knnRecommendedPrice','knn-price-card'],
-      ['Harga konservatif KNN','knnConservativePrice','knn-price-card'],
-      ['Rentang neighbor KNN','knnPriceRange','knn-basis-card'],
+      ['Rekomendasi harga rumah (Robust Spatial KNN)','knnRecommendedPrice','knn-price-card'],
+      ['Harga konservatif KNN (P25)','knnConservativePrice','knn-price-card'],
+      ['Min–Max neighbor KNN','knnMinMaxRange','knn-basis-card'],
+      ['IQR neighbor KNN (P25–P75)','knnIqrRange','knn-basis-card'],
+      ['Raw weighted KNN','knnRawWeightedPrice','knn-basis-card'],
       ['Basis KNN','knnNeighborInfo','knn-basis-card'],
     ];
     for(const [label,id,cls] of cards){
@@ -255,49 +325,73 @@
 
   function ensureKnnControls(){
     const panel = el('marketReferencePanel');
-    if(!panel || el('marketK')) return;
-    const grid = panel.querySelector('.grid2');
-    if(!grid) return;
-    const kWrap = document.createElement('div');
-    kWrap.innerHTML = '<label>K neighbor</label><input id="marketK" type="number" value="7" min="3" max="15" step="2" />';
-    const modelWrap = document.createElement('div');
-    modelWrap.innerHTML = '<label>Model rekomendasi</label><div class="readonly-chip">Spatial KNN + IDW</div>';
-    grid.appendChild(kWrap);
-    grid.appendChild(modelWrap);
-    el('marketK')?.addEventListener('change',()=>refresh(true));
-
+    if(!panel) return;
+    if(!el('marketK')){
+      const grid = panel.querySelector('.grid2');
+      if(grid){
+        const kWrap = document.createElement('div');
+        kWrap.innerHTML = '<label>K neighbor</label><input id="marketK" type="number" value="7" min="3" max="15" step="2" />';
+        const modelWrap = document.createElement('div');
+        modelWrap.innerHTML = '<label>Model rekomendasi</label><div class="readonly-chip">Robust Spatial KNN</div>';
+        grid.appendChild(kWrap);
+        grid.appendChild(modelWrap);
+        el('marketK')?.addEventListener('change',()=>refresh(true));
+      }
+    }
     if(!el('marketKnnStatus')){
       const status = document.createElement('div');
       status.id = 'marketKnnStatus';
-      status.textContent = 'Spatial KNN menunggu polygon aktif.';
+      status.textContent = 'Robust Spatial KNN menunggu polygon aktif.';
       panel.appendChild(status);
+    }
+    if(!el('marketKnnAudit')){
+      const details = document.createElement('details');
+      details.id = 'marketKnnAudit';
+      details.innerHTML = '<summary>Audit neighbor KNN — harga, jarak & bobot</summary><div id="marketKnnAuditBody">Pilih polygon untuk melihat neighbor.</div>';
+      panel.appendChild(details);
     }
   }
 
   function resetStats(message='—'){
-    ['knnRecommendedPrice','knnConservativePrice','knnPriceRange','knnNeighborInfo'].forEach(id=>{
+    ['knnRecommendedPrice','knnConservativePrice','knnMinMaxRange','knnIqrRange','knnRawWeightedPrice','knnNeighborInfo'].forEach(id=>{
       if(el(id)) el(id).textContent = message;
     });
-    if(el('marketKnnStatus')) el('marketKnnStatus').textContent = 'Spatial KNN menunggu polygon aktif.';
+    if(el('marketKnnStatus')) el('marketKnnStatus').textContent = 'Robust Spatial KNN menunggu polygon aktif.';
+    if(el('marketKnnAuditBody')) el('marketKnnAuditBody').textContent = 'Pilih polygon untuk melihat neighbor.';
   }
 
   function renderKnn(result,targetLotArea,category,radiusKm){
     injectStatsCards();
+    ensureKnnControls();
     if(!result){
       resetStats();
-      if(el('marketKnnStatus')) el('marketKnnStatus').textContent = `Tidak ada data harga valid untuk Spatial KNN dalam radius ${radiusKm.toFixed(1)} km.`;
+      if(el('marketKnnStatus')) el('marketKnnStatus').textContent = `Tidak ada data harga valid untuk Robust Spatial KNN dalam radius ${radiusKm.toFixed(1)} km.`;
       return;
     }
     if(el('knnRecommendedPrice')) el('knnRecommendedPrice').textContent = money(result.predictedPrice);
     if(el('knnConservativePrice')) el('knnConservativePrice').textContent = money(result.conservativePrice);
-    if(el('knnPriceRange')) el('knnPriceRange').textContent = `${money(result.p25)} – ${money(result.p75)}`;
-    if(el('knnNeighborInfo')) el('knnNeighborInfo').textContent = `K=${result.k} • ${result.coverage} • max ${result.maxDistanceKm.toFixed(2)} km`;
+    if(el('knnMinMaxRange')) el('knnMinMaxRange').textContent = `${money(result.minPrice)} – ${money(result.maxPrice)}`;
+    if(el('knnIqrRange')) el('knnIqrRange').textContent = `${money(result.p25)} – ${money(result.p75)}`;
+    if(el('knnRawWeightedPrice')) el('knnRawWeightedPrice').textContent = money(result.rawPredictedPrice);
+    if(el('knnNeighborInfo')) el('knnNeighborInfo').textContent = `K=${result.k} • ${result.coverage} • max ${result.maxDistanceKm.toFixed(2)} km • bobot max ${(result.maxWeightShare*100).toFixed(1)}%`;
 
     const lotText = Number.isFinite(targetLotArea) && targetLotArea > 0 ? `${targetLotArea.toFixed(0)} m²` : 'tanpa filter LT';
     const categoryText = category === 'all' ? 'semua kategori' : category;
-    const closest = result.neighbors.slice(0,3).map(n=>`${n.project?.name||'—'} (${n.distanceKm.toFixed(2)} km, ${money(n.price)})`).join(' • ');
+    const robustNote = result.robustnessApplied
+      ? `Guard aktif: ${result.outlierCount} outlier harga diturunkan bobotnya; bobot tiap neighbor dibatasi ${(MAX_NEIGHBOR_WEIGHT_SHARE*100).toFixed(0)}%.`
+      : `Tidak ada outlier dominan; bobot tiap neighbor tetap dibatasi ${(MAX_NEIGHBOR_WEIGHT_SHARE*100).toFixed(0)}%.`;
     if(el('marketKnnStatus')){
-      el('marketKnnStatus').innerHTML = `<b>Spatial KNN:</b> rekomendasi ${money(result.predictedPrice)} • floor P25 ${money(result.conservativePrice)} • ${result.k} neighbor • target LT ${lotText} • ${categoryText}.<br>${closest}`;
+      el('marketKnnStatus').innerHTML = `<b>Robust Spatial KNN:</b> rekomendasi ${money(result.predictedPrice)} • raw weighted ${money(result.rawPredictedPrice)} • P25 ${money(result.conservativePrice)} • K=${result.k} • target LT ${lotText} • ${categoryText}.<br>${robustNote}`;
+    }
+
+    const audit = el('marketKnnAuditBody');
+    if(audit){
+      const rows = result.neighbors.map((n,i)=>{
+        const lt = Number.isFinite(n.landArea) ? `${Math.round(n.landArea)} m²` : '—';
+        const weight = `${((n.finalWeightShare||0)*100).toFixed(1)}%`;
+        return `<tr><td>${i+1}</td><td>${esc(n.project?.name||'—')}<br><small>${esc(n.type)} • LT ${lt}</small></td><td class="num">${n.distanceKm.toFixed(2)} km</td><td class="num">${money(n.price)}</td><td class="num">${weight}</td><td>${n.isPriceOutlier?'<span class="outlier">OUTLIER</span>':'normal'}</td></tr>`;
+      }).join('');
+      audit.innerHTML = `<table><thead><tr><th>#</th><th>Neighbor / tipe</th><th>Jarak</th><th>Harga</th><th>Bobot final</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
   }
 
@@ -372,6 +466,7 @@
     haversineKm,
     selectRepresentativeType,
     spatialKnnEstimate,
+    capWeightShares,
     percentile,
   };
 
