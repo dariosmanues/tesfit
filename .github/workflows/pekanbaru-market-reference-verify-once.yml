@@ -19,25 +19,34 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Rebuild split payload from canonical source
+      - name: Validate complete joined dataset
         run: |
           python - <<'PY'
           from pathlib import Path
-          import base64, gzip, json
+          import base64, gzip, hashlib, json
           root = Path('services/geometry-api/web/data')
-          canonical = root / 'pekanbaru_housing_market.full.b64'
-          b64 = canonical.read_text(encoding='utf-8').strip()
-          payload = json.loads(gzip.decompress(base64.b64decode(b64)))
+          parts = [root / f'pekanbaru_housing_market.part{i:02d}.b64' for i in range(1, 8)]
+          assert all(p.exists() for p in parts), parts
+          chunk_lengths = [len(p.read_text(encoding='utf-8').strip()) for p in parts]
+          assert chunk_lengths == [8000,8000,8000,8000,8000,8000,4696], chunk_lengths
+          b64 = ''.join(p.read_text(encoding='utf-8').strip() for p in parts)
+          assert len(b64) == 52696, len(b64)
+          compressed = base64.b64decode(b64, validate=True)
+          assert hashlib.sha256(compressed).hexdigest() == '8458a080a9606953dc67e113e0ab8f03e034ec183626f3c2152f8c27b5202d0c'
+          raw = gzip.decompress(compressed)
+          assert hashlib.sha256(raw).hexdigest() == '4e093599eeda74f6352dda0f27bde0c365f94349cd7a7e2ba9e3b3355e43e6ac'
+          payload = json.loads(raw)
           records = payload['records']
           meta = payload['metadata']
           assert len(records) == 519, len(records)
-          assert meta == {'record_count': 519, 'mapped_count': 518, 'unmapped_count': 1}, meta
-          for i, start in enumerate(range(0, len(b64), 8000), 1):
-              (root / f'pekanbaru_housing_market.part{i:02d}.b64').write_text(b64[start:start+8000], encoding='utf-8')
-          parts = sorted(root.glob('pekanbaru_housing_market.part*.b64'))
-          assert len(parts) == 7, [p.name for p in parts]
-          assert ''.join(p.read_text(encoding='utf-8') for p in parts) == b64
-          print('REBUILT:', len(b64), 'base64 chars in', len(parts), 'parts')
+          assert meta == {'record_count':519,'mapped_count':518,'unmapped_count':1}, meta
+          required = {'id','name','developer','association','district','village','subsidized_units','commercial_units','phone','whatsapp','email','lat','lon','types'}
+          assert all(required.issubset(r) for r in records)
+          assert len({r['id'] for r in records}) == 519
+          assert sum(1 for r in records if r.get('lat') is not None and r.get('lon') is not None) == 518
+          assert sum(1 for r in records if r.get('lat') is None or r.get('lon') is None) == 1
+          assert sum(len(r.get('types') or []) for r in records) > 0
+          print('DATASET OK:', len(records), 'projects /', meta['mapped_count'], 'mapped / chunks', chunk_lengths)
           PY
 
       - name: Activate market reference loader
@@ -52,29 +61,6 @@ jobs:
               p.write_text(text, encoding='utf-8')
           PY
 
-      - name: Validate complete joined dataset
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import base64, gzip, json
-          root = Path('services/geometry-api/web/data')
-          parts = [root / f'pekanbaru_housing_market.part{i:02d}.b64' for i in range(1, 8)]
-          assert all(p.exists() for p in parts), parts
-          b64 = ''.join(p.read_text(encoding='utf-8').strip() for p in parts)
-          payload = json.loads(gzip.decompress(base64.b64decode(b64)))
-          records = payload['records']
-          meta = payload['metadata']
-          assert len(records) == 519, len(records)
-          assert meta['record_count'] == 519
-          assert meta['mapped_count'] == 518
-          assert meta['unmapped_count'] == 1
-          required = {'id','name','developer','association','district','village','subsidized_units','commercial_units','phone','whatsapp','email','lat','lon','types'}
-          assert all(required.issubset(r) for r in records)
-          assert sum(1 for r in records if r.get('lat') is not None and r.get('lon') is not None) == 518
-          assert sum(len(r.get('types') or []) for r in records) > 0
-          print('DATASET OK:', len(records), 'projects /', meta['mapped_count'], 'mapped')
-          PY
-
       - name: JavaScript syntax checks
         run: |
           node --check services/geometry-api/web/market-reference.js
@@ -85,7 +71,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/pekanbaru-market-reference-verify-once.yml
-          git rm services/geometry-api/web/data/pekanbaru_housing_market.full.b64
-          git add services/geometry-api/web/recovery-monitor.js services/geometry-api/web/data/pekanbaru_housing_market.part*.b64
-          git commit -m "feat: join Pekanbaru housing market reference into Development OS"
+          git add services/geometry-api/web/recovery-monitor.js
+          git commit -m "feat: activate Pekanbaru market reference in Development OS"
           git push origin HEAD:feat/pekanbaru-market-reference
