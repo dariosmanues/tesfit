@@ -27,6 +27,7 @@ jobs:
           repairs = {
               'pekanbaru_housing_market.part01.b64': ['.repair_part01a.txt','.repair_part01b.txt'],
               'pekanbaru_housing_market.part03.b64': ['.repair_part03a.txt','.repair_part03b.txt'],
+              'pekanbaru_housing_market.part06.b64': ['.repair_part06a.txt','.repair_part06b.txt'],
           }
           for target, sources in repairs.items():
               text = ''.join((root / name).read_text(encoding='utf-8').strip() for name in sources)
@@ -98,7 +99,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/pekanbaru-market-reference-verify-once.yml
-          git rm services/geometry-api/web/data/.repair_part01a.txt services/geometry-api/web/data/.repair_part01b.txt services/geometry-api/web/data/.repair_part03a.txt services/geometry-api/web/data/.repair_part03b.txt
-          git add services/geometry-api/web/recovery-monitor.js services/geometry-api/web/data/pekanbaru_housing_market.part01.b64 services/geometry-api/web/data/pekanbaru_housing_market.part03.b64
+          git rm services/geometry-api/web/data/.repair_part01a.txt services/geometry-api/web/data/.repair_part01b.txt services/geometry-api/web/data/.repair_part03a.txt services/geometry-api/web/data/.repair_part03b.txt services/geometry-api/web/data/.repair_part06a.txt services/geometry-api/web/data/.repair_part06b.txt
+          git add services/geometry-api/web/recovery-monitor.js services/geometry-api/web/data/pekanbaru_housing_market.part01.b64 services/geometry-api/web/data/pekanbaru_housing_market.part03.b64 services/geometry-api/web/data/pekanbaru_housing_market.part06.b64
           git commit -m "feat: activate Pekanbaru market reference in Development OS"
           git push origin HEAD:feat/pekanbaru-market-reference
