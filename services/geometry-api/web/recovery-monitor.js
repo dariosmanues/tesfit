@@ -223,3 +223,17 @@ window.addEventListener('load',()=>{
   const cancelBtn=solverEl('solverCancelBtn');
   if(cancelBtn)cancelBtn.onclick=cancelRecoverySolver;
 });
+
+
+// Development OS — Pekanbaru housing market reference loader.
+(() => {
+  const load = () => {
+    if (document.querySelector('script[data-devos-market-reference]')) return;
+    const s = document.createElement('script');
+    s.src = '/static/market-reference.js?v=2.5.14';
+    s.dataset.devosMarketReference = '1';
+    document.body.appendChild(s);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, {once:true});
+  else load();
+})();
