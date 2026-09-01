@@ -19,6 +19,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Rebuild split payload from canonical source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, json
+          root = Path('services/geometry-api/web/data')
+          canonical = root / 'pekanbaru_housing_market.full.b64'
+          b64 = canonical.read_text(encoding='utf-8').strip()
+          payload = json.loads(gzip.decompress(base64.b64decode(b64)))
+          records = payload['records']
+          meta = payload['metadata']
+          assert len(records) == 519, len(records)
+          assert meta == {'record_count': 519, 'mapped_count': 518, 'unmapped_count': 1}, meta
+          for i, start in enumerate(range(0, len(b64), 8000), 1):
+              (root / f'pekanbaru_housing_market.part{i:02d}.b64').write_text(b64[start:start+8000], encoding='utf-8')
+          parts = sorted(root.glob('pekanbaru_housing_market.part*.b64'))
+          assert len(parts) == 7, [p.name for p in parts]
+          assert ''.join(p.read_text(encoding='utf-8') for p in parts) == b64
+          print('REBUILT:', len(b64), 'base64 chars in', len(parts), 'parts')
+          PY
+
       - name: Activate market reference loader
         run: |
           python - <<'PY'
@@ -50,6 +71,7 @@ jobs:
           required = {'id','name','developer','association','district','village','subsidized_units','commercial_units','phone','whatsapp','email','lat','lon','types'}
           assert all(required.issubset(r) for r in records)
           assert sum(1 for r in records if r.get('lat') is not None and r.get('lon') is not None) == 518
+          assert sum(len(r.get('types') or []) for r in records) > 0
           print('DATASET OK:', len(records), 'projects /', meta['mapped_count'], 'mapped')
           PY
 
@@ -63,6 +85,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/pekanbaru-market-reference-verify-once.yml
-          git add services/geometry-api/web/recovery-monitor.js
-          git commit -m "feat: activate Pekanbaru market reference in Development OS"
+          git rm services/geometry-api/web/data/pekanbaru_housing_market.full.b64
+          git add services/geometry-api/web/recovery-monitor.js services/geometry-api/web/data/pekanbaru_housing_market.part*.b64
+          git commit -m "feat: join Pekanbaru housing market reference into Development OS"
           git push origin HEAD:feat/pekanbaru-market-reference
