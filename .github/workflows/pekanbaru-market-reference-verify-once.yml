@@ -1,0 +1,68 @@
+name: Pekanbaru market reference verify
+
+on:
+  push:
+    branches: [feat/pekanbaru-market-reference]
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-activate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Activate market reference loader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('services/geometry-api/web/recovery-monitor.js')
+          text = p.read_text(encoding='utf-8')
+          marker = '// Development OS — Pekanbaru housing market reference loader.'
+          if marker not in text:
+              text += '''\n\n// Development OS — Pekanbaru housing market reference loader.\n(() => {\n  const load = () => {\n    if (document.querySelector('script[data-devos-market-reference]')) return;\n    const s = document.createElement('script');\n    s.src = '/static/market-reference.js?v=2.5.14';\n    s.dataset.devosMarketReference = '1';\n    document.body.appendChild(s);\n  };\n  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, {once:true});\n  else load();\n})();\n'''
+              p.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate complete joined dataset
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, json
+          root = Path('services/geometry-api/web/data')
+          parts = [root / f'pekanbaru_housing_market.part{i:02d}.b64' for i in range(1, 8)]
+          assert all(p.exists() for p in parts), parts
+          b64 = ''.join(p.read_text(encoding='utf-8').strip() for p in parts)
+          payload = json.loads(gzip.decompress(base64.b64decode(b64)))
+          records = payload['records']
+          meta = payload['metadata']
+          assert len(records) == 519, len(records)
+          assert meta['record_count'] == 519
+          assert meta['mapped_count'] == 518
+          assert meta['unmapped_count'] == 1
+          required = {'id','name','developer','association','district','village','subsidized_units','commercial_units','phone','whatsapp','email','lat','lon','types'}
+          assert all(required.issubset(r) for r in records)
+          assert sum(1 for r in records if r.get('lat') is not None and r.get('lon') is not None) == 518
+          print('DATASET OK:', len(records), 'projects /', meta['mapped_count'], 'mapped')
+          PY
+
+      - name: JavaScript syntax checks
+        run: |
+          node --check services/geometry-api/web/market-reference.js
+          node --check services/geometry-api/web/recovery-monitor.js
+
+      - name: Commit verified activation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/pekanbaru-market-reference-verify-once.yml
+          git add services/geometry-api/web/recovery-monitor.js
+          git commit -m "feat: activate Pekanbaru market reference in Development OS"
+          git push origin HEAD:feat/pekanbaru-market-reference
