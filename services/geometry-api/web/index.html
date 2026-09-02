@@ -3,282 +3,150 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>"FIKRI IKHSAN" Site Planing</title>
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@watergis/maplibre-gl-terradraw@1.16.0/dist/maplibre-gl-terradraw.css" />
-  <link rel="stylesheet" href="/static/app.css?v=2.5.14" />
-  <link rel="stylesheet" href="/static/recovery-monitor.css?v=2.5.14" />
+  <title>Development OS — Fikri Ikhsan</title>
+  <style>
+    :root{--bg:#f5f7fb;--panel:#fff;--text:#111827;--muted:#667085;--line:#e4e7ec;--blue:#155eef;--blue2:#0b63f3;--green:#079455;--green2:#12b76a;--amber:#f79009;--violet:#7f56d9;--red:#d92d20;--shadow:0 10px 30px rgba(16,24,40,.07);--sidebar:228px}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    button,input{font:inherit}.app{min-height:100vh;display:grid;grid-template-columns:var(--sidebar) 1fr}.sidebar{position:sticky;top:0;height:100vh;background:#fff;border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;z-index:10}
+    .brand{display:flex;gap:11px;align-items:center;padding:4px 8px 20px}.logo{width:43px;height:43px;border-radius:13px;background:linear-gradient(135deg,#0ea5e9,#155eef 55%,#0f766e);display:grid;place-items:center;color:#fff;font-weight:900;box-shadow:0 8px 18px rgba(21,94,239,.22)}
+    .brand small{display:block;color:var(--blue);font-size:10px;font-weight:900;letter-spacing:.08em}.brand strong{display:block;font-size:18px;line-height:1.05;margin-top:2px}.brand span{display:block;color:#475467;font-size:11px;margin-top:3px}
+    .nav{display:grid;gap:6px}.nav button{width:100%;border:0;background:transparent;color:#344054;text-align:left;padding:10px 11px;border-radius:9px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:9px}.nav button:hover{background:#f2f4f7}.nav button.active{background:#155eef;color:#fff;box-shadow:0 8px 18px rgba(21,94,239,.18)}.nav button[disabled]{opacity:.45;cursor:not-allowed}.nav .soon{margin-left:auto;font-size:9px;border:1px solid currentColor;border-radius:999px;padding:1px 6px}
+    .side-foot{margin-top:auto;border:1px solid #dbe5ff;background:linear-gradient(180deg,#f8fbff,#fff);border-radius:13px;padding:12px}.side-foot .version{font-weight:900;color:#155eef}.side-foot p{font-size:10px;color:#667085;line-height:1.45;margin:5px 0 0}
+    .shell{min-width:0}.topbar{height:74px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:8}.top-left h1{font-size:17px;margin:0}.top-left p{font-size:11px;color:var(--muted);margin:4px 0 0}.top-actions{display:flex;gap:8px;align-items:center}.btn{border:1px solid #d0d5dd;background:#fff;color:#344054;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer}.btn.primary{background:var(--green);border-color:var(--green);color:#fff}.btn.blue{border-color:#b2ccff;color:#155eef}.badge{font-size:10px;font-weight:900;border-radius:999px;padding:5px 8px;background:#ecfdf3;color:#027a48;border:1px solid #abefc6}
+    .view{display:none}.view.active{display:block}.dashboard{padding:20px 22px 34px;max-width:1600px;margin:auto}.hero{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.65fr);gap:15px;margin-bottom:15px}.card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.02)}
+    .hero-main{padding:20px;background:linear-gradient(135deg,#fff 0,#f8fbff 55%,#f3fff9 100%)}.eyebrow{font-size:10px;font-weight:900;letter-spacing:.1em;color:var(--blue)}.hero h2{font-size:26px;line-height:1.12;margin:6px 0 8px}.hero p{font-size:12px;line-height:1.6;color:#475467;max-width:820px;margin:0}.hero-tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:15px}.tag{font-size:10px;font-weight:800;padding:6px 8px;border:1px solid #d0d5dd;border-radius:999px;background:#fff}.tag.ok{border-color:#abefc6;background:#ecfdf3;color:#027a48}.tag.info{border-color:#b2ccff;background:#eff4ff;color:#175cd3}.tag.warn{border-color:#fedf89;background:#fffaeb;color:#b54708}
+    .hero-side{padding:17px}.hero-side h3,.section-head h3{margin:0;font-size:13px}.progress-row{display:flex;align-items:center;gap:14px;margin-top:14px}.ring{width:86px;height:86px;border-radius:50%;background:conic-gradient(var(--green) 0 62%,#eaecf0 62% 100%);display:grid;place-items:center;position:relative}.ring:after{content:"";position:absolute;inset:10px;background:#fff;border-radius:50%}.ring b,.ring span{position:relative;z-index:1}.ring b{font-size:21px}.ring span{font-size:9px;color:#667085}.progress-copy strong{display:block;font-size:13px}.progress-copy p{font-size:10.5px;line-height:1.5;margin:5px 0;color:#667085}
+    .kpis{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px;margin-bottom:15px}.kpi{padding:13px}.kpi span{font-size:9.5px;color:#667085;display:block}.kpi b{font-size:18px;display:block;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kpi small{font-size:9px;color:#98a2b3}.kpi .good{color:#079455}.kpi .bluev{color:#155eef}.kpi .violet{color:#7f56d9}
+    .grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(330px,.7fr);gap:15px}.panel{padding:16px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-head p{font-size:10px;color:#667085;margin:3px 0 0}.mini{font-size:9px;font-weight:900;border-radius:999px;padding:4px 7px;border:1px solid #d0d5dd;color:#475467}.mini.done{background:#ecfdf3;border-color:#abefc6;color:#027a48}.mini.partial{background:#fffaeb;border-color:#fedf89;color:#b54708}.mini.plan{background:#f2f4f7;color:#667085}
+    .work-list{display:grid;gap:8px}.work{display:grid;grid-template-columns:24px 1fr auto;gap:9px;align-items:start;padding:10px;border:1px solid #eaecf0;border-radius:10px}.tick{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:900;background:#ecfdf3;color:#079455}.work strong{display:block;font-size:11px}.work p{font-size:9.5px;line-height:1.45;color:#667085;margin:3px 0 0}.work time{font-size:9px;color:#98a2b3;white-space:nowrap}
+    .timeline{display:grid;gap:10px}.event{display:grid;grid-template-columns:9px 1fr;gap:9px}.dot{width:9px;height:9px;border-radius:50%;background:#12b76a;margin-top:4px;box-shadow:0 0 0 4px #ecfdf3}.event strong{font-size:10.5px;display:block}.event p{font-size:9.5px;color:#667085;margin:2px 0;line-height:1.4}.event time{font-size:8.5px;color:#98a2b3}
+    .roadmap{margin-top:15px;padding:16px}.roadmap-grid{display:grid;grid-template-columns:repeat(10,minmax(105px,1fr));gap:8px;overflow-x:auto;padding-bottom:3px}.stage{min-height:118px;border:1px solid #eaecf0;border-radius:11px;padding:10px;background:#fff}.stage .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#f2f4f7;color:#344054;font-size:10px;font-weight:900}.stage.done .n{background:#ecfdf3;color:#079455}.stage.partial .n{background:#eff4ff;color:#155eef}.stage h4{font-size:10px;margin:8px 0 4px}.stage p{font-size:8.8px;color:#667085;line-height:1.35;margin:0}.stage .state{font-size:8.5px;font-weight:900;margin-top:8px}.stage.done .state{color:#079455}.stage.partial .state{color:#155eef}.stage.plan .state{color:#98a2b3}
+    .workspace{height:calc(100vh - 74px);background:#eef2f7;position:relative}.workspace iframe{width:100%;height:100%;border:0;background:#fff}.workspace-tools{position:absolute;top:10px;right:14px;z-index:5;display:flex;gap:6px}.floating{background:rgba(255,255,255,.96);border:1px solid #d0d5dd;border-radius:9px;padding:7px 9px;font-size:10px;font-weight:800;color:#344054;box-shadow:var(--shadow)}
+    .notice{position:fixed;right:18px;bottom:18px;max-width:380px;background:#101828;color:#fff;border-radius:10px;padding:11px 13px;font-size:11px;line-height:1.45;box-shadow:0 16px 35px rgba(16,24,40,.25);opacity:0;transform:translateY(8px);pointer-events:none;transition:.2s;z-index:20}.notice.show{opacity:1;transform:none}
+    @media(max-width:1100px){:root{--sidebar:190px}.kpis{grid-template-columns:repeat(3,1fr)}.grid,.hero{grid-template-columns:1fr}.roadmap-grid{grid-template-columns:repeat(5,minmax(130px,1fr))}}
+    @media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}.nav{grid-template-columns:repeat(2,1fr)}.side-foot{display:none}.topbar{position:relative;height:auto;padding:12px 14px;gap:10px;align-items:flex-start}.top-actions{flex-wrap:wrap;justify-content:flex-end}.dashboard{padding:14px}.kpis{grid-template-columns:repeat(2,1fr)}.roadmap-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.workspace{height:78vh}}
+  </style>
 </head>
 <body>
-  <header>
-    <div>
-      <div class="eyebrow">DEVELOPMENT OS</div>
-      <h1>"FIKRI IKHSAN" Site Planing</h1>
-    </div>
-    <div id="apiBadge" class="badge">API checking…</div>
-  </header>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">DO</div><div><small>DEVELOPMENT OS</small><strong>FIKRI IKHSAN</strong><span>Site Planning & Development System</span></div></div>
+    <nav class="nav">
+      <button class="active" data-view="dashboard">⌂ Dashboard</button>
+      <button data-view="siteplan">▱ Site Plan</button>
+      <button data-view="market">▦ Market Reference</button>
+      <button data-view="knn">◎ Spatial KNN</button>
+      <button data-planned="House Generator">⌂ House Generator <span class="soon">NEXT</span></button>
+      <button data-planned="RAB / Costing">▤ RAB / Costing <span class="soon">NEXT</span></button>
+      <button data-planned="Feasibility">◫ Feasibility <span class="soon">NEXT</span></button>
+      <button data-planned="Reports M9">▧ Reports (M9) <span class="soon">PLAN</span></button>
+      <button data-planned="AI Marketing M10">✦ AI Marketing (M10) <span class="soon">PLAN</span></button>
+    </nav>
+    <div class="side-foot"><div class="version">Core M2.5.14</div><p>Structural Corridor Recovery + strict Standard Lot + Robust Spatial KNN.</p></div>
+  </aside>
 
-  <main>
-    <section class="map-wrap">
-      <div id="map"></div>
-      <div class="legend">
-        <span><i class="swatch parcel"></i>Batas lahan</span>
-        <span><i class="swatch road"></i>Jalan</span>
-        <span><i class="swatch lot"></i>Kavling Standar</span>
-        <span><i class="swatch residual-lot"></i>Kavling Adaptive (dari lahan sisa)</span>
-        <span><i class="swatch rth"></i>RTH</span>
-        <span><i class="swatch psu"></i>PSU</span>
-        <span><i class="line-swatch drainage"></i>Drainase</span>
-      </div>
-      <div class="map-hint">Gambar/import batas lahan. M2.5.14 membentuk <b>jalan → blok → kavling standar</b> dengan target <b>Efisiensi Kavling ≥ 70%</b>. Ukuran Geometry Settings adalah hard module; lahan sisa dievaluasi sebagai Adaptive.</div>
-    </section>
+  <section class="shell">
+    <header class="topbar">
+      <div class="top-left"><h1 id="pageTitle">Development OS Dashboard</h1><p id="pageSub">Ringkasan implementasi yang benar-benar sudah ada di repository.</p></div>
+      <div class="top-actions"><span id="apiMirror" class="badge">API menunggu workspace</span><button class="btn blue" id="refreshBtn">Refresh Status</button><button class="btn primary" id="openWorkspaceBtn">Buka Site Plan</button></div>
+    </header>
 
-    <aside>
-      <div class="panel">
-        <label>Nama Project</label>
-        <input id="projectName" value="Site Pekanbaru 01" />
-      </div>
+    <main id="dashboardView" class="view active dashboard">
+      <section class="hero">
+        <div class="card hero-main"><div class="eyebrow">CURRENT BUILD • 02 SEP 2026</div><h2>Development OS sekarang punya satu pintu masuk untuk melihat progres, data pasar, dan core Site Planning.</h2><p>Dashboard ini hanya menandai fitur yang memang sudah tersedia di repository. Modul yang belum punya engine tidak ditampilkan seolah-olah sudah selesai. Core solver tetap berjalan di workspace lama agar perubahan dashboard tidak merusak M2.5.14.</p><div class="hero-tags"><span class="tag ok">M2.5.14 Structural Recovery</span><span class="tag ok">Standard Lot Strict</span><span class="tag ok">Adaptive = Residual</span><span class="tag info">Market Reference Pekanbaru</span><span class="tag info">Robust Spatial KNN</span><span class="tag warn">M4/M7/M8/M9/M10 belum engine</span></div></div>
+        <div class="card hero-side"><h3>Implementation Coverage</h3><div class="progress-row"><div class="ring"><div style="text-align:center"><b>6/10</b><br><span>capability groups</span></div></div><div class="progress-copy"><strong>Core + Market layer sudah usable</strong><p>Land intake, site-plan generation, lot selection/editor, geometry validation, market reference, dan Spatial KNN sudah punya code path. Modul generasi rumah, RAB, feasibility, report, dan marketing belum boleh ditandai selesai.</p></div></div></div>
+      </section>
 
-      <div class="panel">
-        <div class="tabs">
-          <button class="tab active" data-tab="draw">Draw</button>
-          <button class="tab" data-tab="manual">Koordinat</button>
-          <button class="tab" data-tab="upload">Import</button>
+      <section class="kpis">
+        <div class="card kpi"><span>Core Version</span><b class="bluev">M2.5.14</b><small>Recovery Solver</small></div>
+        <div class="card kpi"><span>Efisiensi Kavling</span><b id="kpiEfficiency" class="good">—</b><small>Target wajib ≥ 70%</small></div>
+        <div class="card kpi"><span>Standard Lots</span><b id="kpiStandard" class="bluev">—</b><small>Exact Geometry Settings</small></div>
+        <div class="card kpi"><span>Adaptive Lots</span><b id="kpiAdaptive" class="violet">—</b><small>Residual-only</small></div>
+        <div class="card kpi"><span>Market Dataset</span><b id="kpiMarket">loading…</b><small>Pekanbaru housing</small></div>
+        <div class="card kpi"><span>KNN Recommendation</span><b id="kpiKnn" class="good">—</b><small>Robust Spatial KNN</small></div>
+      </section>
+
+      <section class="grid">
+        <div class="card panel"><div class="section-head"><div><h3>Pekerjaan yang sudah selesai / tersedia saat ini</h3><p>Diambil dari implementasi yang ada di repository Development OS.</p></div><span class="mini done">8 work items</span></div><div class="work-list">
+          <div class="work"><div class="tick">✓</div><div><strong>Land polygon intake & geospatial import</strong><p>Draw polygon, koordinat manual, KML/KMZ, GeoJSON, CSV, SHP ZIP, DXF dan konversi CRS/UTM.</p></div><time>DONE</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Generative Site Plan Solver</strong><p>Road → block → exact Standard lots → RTH/PSU/drainage, alternatives, ranking dan validation.</p></div><time>M2.5.14</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Strict Standard Lot contract</strong><p>Ukuran Standard berasal dari Geometry Settings; 8×15 tetap 8×15 dan tidak boleh di-shrink untuk mengejar score.</p></div><time>DONE</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Adaptive / residual logic + Recovery Solver</strong><p>Adaptive hanya berasal dari sisa lahan yang valid; gross lot efficiency ≥70% tetap hard acceptance.</p></div><time>M2.5.14</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Parametric Constraint Editor</strong><p>Multi-select, box select, drag, angle snap, auto-reflow, repack block, undo/redo dan atomic rollback.</p></div><time>DONE</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Project save layer</strong><p>SQLite untuk local development dan PostgreSQL/PostGIS untuk deployment.</p></div><time>DONE</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Market Reference Pekanbaru</strong><p>Dataset perumahan ter-join, radius 5–7 km, P25/median, nearest comparable dan map layer.</p></div><time>READY</time></div>
+          <div class="work"><div class="tick">✓</div><div><strong>Robust Spatial KNN</strong><p>Distance weighting, lot similarity, outlier guard, capped neighbor weights, conservative P25 dan audit neighbor.</p></div><time>READY</time></div>
         </div>
 
-        <div id="tab-draw" class="tabbody active">
-          <p class="small">Gambar satu polygon menggunakan toolbar peta.</p>
-          <button id="useDrawn" class="primary">Gunakan Polygon</button>
-          <button id="loadSample">Load Sample Pekanbaru</button>
+        <div class="card panel"><div class="section-head"><div><h3>Aktivitas terbaru</h3><p>Perkembangan yang paling dekat dengan build sekarang.</p></div><span class="mini">LATEST</span></div><div class="timeline">
+          <div class="event"><div class="dot"></div><div><strong>Robust Spatial KNN dibuat lebih auditable</strong><p>Min–max, IQR, raw weighted estimate, outlier status dan bobot final neighbor ditambahkan.</p><time>02 Sep 2026</time></div></div>
+          <div class="event"><div class="dot"></div><div><strong>Market Reference Pekanbaru tersedia di repo</strong><p>Housing dataset disimpan sebagai data chunks dan modul frontend terpisah dari solver.</p><time>02 Sep 2026</time></div></div>
+          <div class="event"><div class="dot"></div><div><strong>M2.5.14 Structural Corridor Recovery</strong><p>Solver dapat mengeksplorasi corridor count/spacing dan block-depth combinations tanpa melanggar Standard Lot.</p><time>Current core</time></div></div>
+          <div class="event"><div class="dot"></div><div><strong>Dashboard integration branch</strong><p>Dashboard dibuat sebagai shell non-destructive; workspace M2.5.14 dipertahankan sebagai siteplan.html.</p><time>Now</time></div></div>
         </div>
+      </section>
 
-        <div id="tab-manual" class="tabbody">
-          <label>EPSG</label>
-          <input id="manualEpsg" type="number" value="4326" />
-          <label>Urutan koordinat</label>
-          <select id="manualOrder">
-            <option value="latlon">Latitude, Longitude (EPSG:4326)</option>
-            <option value="xy">X/Easting, Y/Northing</option>
-          </select>
-          <label>Koordinat — satu titik per baris</label>
-          <textarea id="manualText" rows="7" placeholder="0.510234, 101.438721\n0.510441, 101.439812\n0.509122, 101.439991\n0.508933, 101.438801"></textarea>
-          <button id="useManual" class="primary">Buat Polygon</button>
-        </div>
+      <section class="card roadmap"><div class="section-head"><div><h3>Development OS — Product Capability Roadmap</h3><p>Status berdasarkan code yang tersedia sekarang, bukan mockup.</p></div><span class="mini partial">IMPLEMENTATION REALITY</span></div><div class="roadmap-grid">
+        <div class="stage done"><div class="n">1</div><h4>Land Polygon</h4><p>Draw, coordinates & geospatial import.</p><div class="state">COMPLETED</div></div>
+        <div class="stage done"><div class="n">2</div><h4>Site Plan Solver</h4><p>Road, block, lots, RTH, PSU, drainage.</p><div class="state">COMPLETED</div></div>
+        <div class="stage done"><div class="n">3</div><h4>Select / Edit Lot</h4><p>Parametric editor & lot selection.</p><div class="state">COMPLETED</div></div>
+        <div class="stage plan"><div class="n">4</div><h4>House Generator</h4><p>AI floor plan engine for selected lot.</p><div class="state">NOT BUILT</div></div>
+        <div class="stage partial"><div class="n">5</div><h4>Validation</h4><p>Site geometry validation exists; house audit belum.</p><div class="state">PARTIAL</div></div>
+        <div class="stage done"><div class="n">6</div><h4>Market Intelligence</h4><p>Market Reference + Robust Spatial KNN.</p><div class="state">READY</div></div>
+        <div class="stage plan"><div class="n">7</div><h4>RAB / Costing</h4><p>BOQ dan cost estimation engine.</p><div class="state">NOT BUILT</div></div>
+        <div class="stage plan"><div class="n">8</div><h4>Feasibility</h4><p>GDV, margin, cashflow & profitability.</p><div class="state">NOT BUILT</div></div>
+        <div class="stage plan"><div class="n">9</div><h4>Reports</h4><p>Decision package / investment report.</p><div class="state">PLANNED</div></div>
+        <div class="stage plan"><div class="n">10</div><h4>AI Marketing</h4><p>Lead, campaign, follow-up & sales agent.</p><div class="state">PLANNED</div></div>
+      </div></section>
+    </main>
 
-        <div id="tab-upload" class="tabbody">
-          <label>File</label>
-          <input id="fileInput" type="file" accept=".kml,.kmz,.geojson,.json,.csv,.zip,.dxf,.dwg" />
-          <label>EPSG sumber (DXF / CSV Easting-Northing)</label>
-          <input id="fileEpsg" type="number" placeholder="contoh: 32647" />
-          <div class="file-help">KML, KMZ, GeoJSON, CSV, SHP dalam ZIP, DXF. DWG: konversi dulu ke DXF.</div>
-          <button id="uploadBtn" class="primary">Import File</button>
-        </div>
-      </div>
+    <section id="workspaceView" class="view workspace"><div class="workspace-tools"><span id="workspaceHint" class="floating">M2.5.14 workspace</span><button class="btn" id="backDashboardBtn">← Dashboard</button></div><iframe id="siteFrame" src="/static/siteplan.html" title="Development OS Site Plan Workspace"></iframe></section>
+  </section>
+</div>
+<div id="notice" class="notice"></div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const frame = $('siteFrame');
+  const dashboard = $('dashboardView');
+  const workspace = $('workspaceView');
+  const navButtons = [...document.querySelectorAll('.nav button[data-view]')];
+  let injected = false;
 
-      <div class="panel">
-        <h2>Geometry Settings</h2>
-        <div class="grid3">
-          <div><label>Setback (m)</label><input id="setback" type="number" value="3" step="0.5" min="0" /></div>
-          <div><label>Lebar kavling (m)</label><input id="lotWidth" type="number" value="8" step="0.5" min="1" /></div>
-          <div><label>Dalam kavling (m)</label><input id="lotDepth" type="number" value="15" step="0.5" min="1" /></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Site Planning Settings</h2>
-        <div class="grid2">
-          <div><label>Jalan utama (m)</label><input id="mainRoad" type="number" value="8" step="0.5" min="4" /></div>
-          <div><label>Jalan lingkungan (m)</label><input id="localRoad" type="number" value="6" step="0.5" min="3" /></div>
-          <div><label>Target RTH (%)</label><input id="rthPct" type="number" value="10" step="1" min="0" max="50" /></div>
-          <div><label>Target PSU (%)</label><input id="psuPct" type="number" value="5" step="1" min="0" max="30" /></div>
-          <div><label>Jumlah alternatif</label>
-            <select id="altCount"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
-          </div>
-          <div><label>Drainase</label><div class="readonly-chip">2 sisi jalan • otomatis</div></div>
-        </div>
-        <label class="land-opt-master"><input id="landOptimizationToggle" type="checkbox" /> <span><b>Residual Optimizer — TARGET EFISIENSI KAVLING ≥ 70%</b><small>OFF = masterplan asli • ON = lahan sisa diolah menjadi Adaptive; jalan dan Kavling Standar tetap</small></span></label>
-        <button id="generateBtn" class="accent" disabled>Generate Alternatif Layout</button>
-      </div>
-
-      <div class="panel solver-monitor" id="solverMonitor">
-        <div class="solver-head">
-          <div><h2>M2.5.14 — Recovery Solver Monitor</h2><div class="small">Progress berasal dari candidate yang benar-benar dihitung backend. Rule final tetap STRICT: Efisiensi Kavling ≥ 70%.</div></div>
-          <span id="solverOverallStatus" class="solver-state">Siap</span>
-        </div>
-        <div class="solver-kpis">
-          <div class="solver-kpi"><span>Best saat ini</span><b id="solverBest">—</b></div>
-          <div class="solver-kpi"><span>Target wajib</span><b id="solverTarget">70.00%</b></div>
-          <div class="solver-kpi" id="solverGapBox"><span>Gap</span><b id="solverGap">—</b></div>
-        </div>
-        <div class="solver-progress"><i id="solverProgressBar"></i></div>
-        <button id="solverCancelBtn" class="danger" disabled>Stop Recovery Solver</button>
-        <div id="solverStages" class="solver-stage-list"><div class="empty-state">Solver belum dijalankan.</div></div>
-        <div class="solver-subpanel">
-          <div class="solver-subpanel-title">Candidate aktif</div>
-          <div id="solverCurrent"><div class="empty-state">Belum ada candidate aktif.</div></div>
-        </div>
-        <div class="solver-subpanel">
-          <div class="solver-subpanel-title">Search History — candidate &lt;70% tetap REJECT</div>
-          <div id="solverHistory" class="solver-history"><div class="empty-state">Search History masih kosong.</div></div>
-        </div>
-        <div class="solver-subpanel">
-          <div class="solver-subpanel-title">Feasibility Analysis</div>
-          <div id="solverFeasibility"><div class="empty-state">Dijalankan jika seluruh recovery stage belum mencapai 70%.</div></div>
-        </div>
-      </div>
-
-      <div class="panel" id="alternativesPanel">
-        <div class="panel-title-row"><h2>Alternatif Layout</h2><span id="altSummary" class="mini-badge">belum ada</span></div>
-        <div id="alternativeCards" class="alt-list"><div class="empty-state">Generate layout untuk melihat beberapa opsi otomatis.</div></div>
-      </div>
-
-      <div class="panel optimizer-panel" id="yieldOptimizerPanel">
-        <div class="panel-title-row"><h2>M2.5.12 — Residual Optimizer</h2><span class="validation neutral" id="yieldStatus">Nonaktif • skenario awal</span></div>
-        <div class="yield-target-card">
-          <b>TARGET UTAMA: EFISIENSI KAVLING ≥ 70% DARI TOTAL LAHAN</b>
-          <small>Kavling Standar, jalan, RTH dan PSU tidak boleh diubah oleh Residual Optimizer. Adaptive hanya boleh berasal dari TRUE residual setelah Standard packing dan wajib lolos saleability validation. Residual bersifat informational.</small>
-        </div>
-        <button id="optimizeYieldBtn" class="yield-btn" disabled>Optimalkan Lahan Sisa (Target ≥ 70% Efisiensi)</button>
-        <div id="yieldResult" class="yield-result empty">Optimalisasi lahan nonaktif. Layout memakai skenario awal.</div>
-      </div>
-
-      <div class="panel" id="manualPanel">
-        <div class="panel-title-row"><h2>Parametric Constraint Siteplan Editor</h2><span id="manualValidation" class="validation neutral">Belum diedit</span></div>
-        <p class="small">Edit hasil generate dengan multi-selection, snapping dan auto-reflow. Jalan/kavling yang digeser dapat memicu penataan ulang objek terkait agar overlap dan frontage tetap terkendali.</p>
-        <button id="manualToggle" class="manual-toggle">Aktifkan Manual Editor</button>
-        <div id="manualControls" class="manual-controls disabled">
-          <div class="tool-strip m23-tools">
-            <button id="toolSelect" class="tool-btn active" title="Pilih / drag objek. Shift+click untuk multi-select">Select / Move</button>
-            <button id="toolBoxSelect" class="tool-btn" title="Drag kotak pada peta untuk memilih banyak objek">Box Select</button>
-            <button id="toolAddRoad" class="tool-btn" title="Klik 2 titik untuk membuat ruas jalan">+ Jalan</button>
-            <button id="toolAddLot" class="tool-btn" title="Klik peta untuk menambah kavling">+ Kavling</button>
-          </div>
-
-          <div class="selection-row"><span>Objek terpilih</span><strong id="editSelection">Belum ada objek dipilih</strong></div>
-
-          <div class="editor-section smart-section">
-            <div class="section-caption">Smart Constraints</div>
-            <div class="smart-toggle-row">
-              <label class="checkline"><input id="autoReflowToggle" type="checkbox" checked /> Parametric Auto-Reflow setelah drag/edit</label>
-              <label class="checkline"><input id="angleSnapToggle" type="checkbox" checked /> Angle Snap</label>
-            </div>
-            <div class="grid2 compact-grid">
-              <div><label>Angle snap (°)</label><input id="angleSnapStep" type="number" value="5" min="1" max="90" step="1" /></div>
-              <div><label>Frontage tolerance (m)</label><input id="frontageTolerance" type="number" value="1.5" min="0.1" max="10" step="0.1" /></div>
-            </div>
-            <div class="edit-grid three">
-              <button id="reflowLocalBtn" disabled>Reflow Local</button>
-              <button id="repackBlockBtn" disabled>Repack Block</button>
-              <button id="validateSmartBtn" disabled>Validate</button>
-            </div>
-            <div class="edit-grid three">
-              <button id="selectLinkedBtn" disabled>Select Linked Lots</button>
-              <button id="duplicateSelectionBtn" disabled>Duplicate Selection</button>
-              <button id="deleteSelectionBtn" class="danger" disabled>Delete Selection</button>
-            </div>
-            <div id="smartStatus" class="small editor-note">Pilih jalan/kavling. Shift+click atau Box Select untuk multi-selection.</div>
-          </div>
-
-          <div class="editor-section">
-            <div class="section-caption">Transformasi objek</div>
-            <div class="grid2 compact-grid">
-              <div><label>Angle / orientasi (°)</label><input id="objectAngle" type="number" value="0" step="0.5" min="-360" max="360" /></div>
-              <div><label>Step geser (m)</label><input id="nudgeStep" type="number" value="0.5" min="0.1" step="0.1" /></div>
-            </div>
-            <div class="edit-grid three">
-              <button id="applyAngleBtn" disabled>Set Angle</button>
-              <button id="rotateLeftBtn" disabled>↺ -5°</button>
-              <button id="rotateRightBtn" disabled>↻ +5°</button>
-            </div>
-            <div class="nudge-pad wide">
-              <button id="nudgeUp" title="Geser utara">↑</button>
-              <button id="nudgeLeft" title="Geser barat">←</button>
-              <button id="nudgeDown" title="Geser selatan">↓</button>
-              <button id="nudgeRight" title="Geser timur">→</button>
-            </div>
-          </div>
-
-          <div id="roadEditor" class="editor-section object-editor disabled-section">
-            <div class="section-caption">Road Editor</div>
-            <div class="grid2 compact-grid">
-              <div><label>Lebar jalan (m)</label><input id="roadWidthEdit" type="number" value="6" step="0.5" min="2" max="40" /></div>
-              <div><label>Tipe</label><select id="roadKindEdit"><option value="main">Utama</option><option value="local" selected>Lingkungan</option></select></div>
-            </div>
-            <div class="edit-grid three">
-              <button id="applyRoadBtn" disabled>Apply Jalan</button>
-              <button id="duplicateRoadBtn" disabled>Duplikat</button>
-              <button id="deleteRoadBtn" class="danger" disabled>Hapus Ruas</button>
-            </div>
-            <div class="small editor-note">Untuk mengubah panjang/arah secara visual: pilih jalan lalu drag bulatan endpoint di peta. Drainase dibangun ulang otomatis.</div>
-          </div>
-
-          <div id="lotEditor" class="editor-section object-editor disabled-section">
-            <div class="section-caption">Kavling Editor</div>
-            <div class="grid2 compact-grid">
-              <div><label>Lebar kavling (m)</label><input id="lotWidthEdit" type="number" value="8" step="0.5" min="1" /></div>
-              <div><label>Dalam kavling (m)</label><input id="lotDepthEdit" type="number" value="15" step="0.5" min="1" /></div>
-            </div>
-            <div class="edit-grid three">
-              <button id="applyLotSizeBtn" disabled>Apply Ukuran</button>
-              <button id="duplicateBtn" disabled>Duplikat</button>
-              <button id="deleteBtn" class="danger" disabled>Hapus</button>
-            </div>
-          </div>
-
-          <div class="editor-section">
-            <div class="section-caption">Orientasi seluruh siteplan</div>
-            <div class="inline-apply">
-              <input id="layoutAngleEdit" type="number" value="0" step="0.5" min="-360" max="360" />
-              <button id="applyLayoutAngleBtn">Apply Layout Angle</button>
-            </div>
-            <div class="small">Memutar jalan, kavling, RTH, PSU, dan drainase bersama-sama terhadap pusat buildable area. Batas tanah tidak ikut diputar.</div>
-          </div>
-
-          <div class="edit-grid four">
-            <button id="undoBtn" disabled>Undo</button>
-            <button id="redoBtn" disabled>Redo</button>
-            <button id="resetManualBtn" disabled>Reset Generate</button>
-            <button id="recalcBtn" disabled>Hitung Ulang</button>
-          </div>
-          <div class="keyboard-help">Keyboard: Shift+click = multi-select • drag box = box select • panah = geser group • Delete = hapus pilihan • Ctrl+Z = undo • Esc = kembali ke Select</div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Site Statistics — Opsi Terpilih</h2>
-        <div class="stats">
-          <div><span>Luas tanah</span><strong id="parcelArea">—</strong></div>
-          <div><span>Buildable</span><strong id="buildArea">—</strong></div>
-          <div><span>Jumlah kavling</span><strong id="lotCount">—</strong></div>
-          <div><span>Kavling Standard</span><strong id="standardLotCount">—</strong></div>
-          <div><span>Kavling Adaptive</span><strong id="adaptiveLotCount">—</strong></div>
-          <div><span>Efisiensi kavling</span><strong id="efficiency">—</strong></div>
-          <div><span>Luas jalan</span><strong id="roadArea">—</strong></div>
-          <div><span>Panjang jalan</span><strong id="roadLength">—</strong></div>
-          <div><span>RTH</span><strong id="rthArea">—</strong></div>
-          <div><span>PSU</span><strong id="psuArea">—</strong></div>
-          <div><span>Drainase</span><strong id="drainageLength">—</strong></div>
-          <div><span>Orientasi</span><strong id="orientation">—</strong></div>
-          <div><span>CRS hitung</span><strong id="utm">—</strong></div>
-          <div><span>Sisa area</span><strong id="unusedArea">—</strong></div>
-          <div><span>Land utilization</span><strong id="landUtilization">—</strong></div>
-          <div><span>Residual / total lahan</span><strong id="residualRatio">—</strong></div>
-          <div><span>Road efficiency</span><strong id="roadEfficiency">—</strong></div>
-          <div><span>Block regularity</span><strong id="blockRegularity">—</strong></div>
-          <div><span>Road connectivity</span><strong id="roadConnectivity">—</strong></div>
-        </div>
-      </div>
-
-      <div class="panel actions">
-        <button id="saveBtn" class="save" disabled>Simpan Opsi Terpilih</button>
-        <div id="message" class="message">Belum ada polygon.</div>
-      </div>
-    </aside>
-  </main>
-
-  <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@watergis/maplibre-gl-terradraw@1.16.0/dist/maplibre-gl-terradraw.umd.js"></script>
-  <script src="/static/app.js?v=2.5.14"></script>
-  <script src="/static/recovery-monitor.js?v=2.5.14"></script>
+  function toast(text){const n=$('notice');n.textContent=text;n.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>n.classList.remove('show'),2800)}
+  function setActive(view){navButtons.forEach(b=>b.classList.toggle('active',b.dataset.view===view));}
+  function showDashboard(){dashboard.classList.add('active');workspace.classList.remove('active');setActive('dashboard');$('pageTitle').textContent='Development OS Dashboard';$('pageSub').textContent='Ringkasan implementasi yang benar-benar sudah ada di repository.';sync();}
+  function showWorkspace(target='siteplan'){
+    dashboard.classList.remove('active');workspace.classList.add('active');setActive(target);
+    const title={siteplan:'Site Plan Workspace',market:'Market Reference Pekanbaru',knn:'Robust Spatial KNN'}[target]||'Workspace';
+    $('pageTitle').textContent=title;$('pageSub').textContent='Core M2.5.14 tetap dipertahankan; dashboard hanya menjadi shell navigasi.';
+    $('workspaceHint').textContent=target==='market'?'Market Reference • radius comparable':target==='knn'?'Robust Spatial KNN • audit neighbor':'M2.5.14 Site Planning';
+    focusInsideFrame(target);
+  }
+  function addScript(doc,src){return new Promise((resolve,reject)=>{if(doc.querySelector(`script[data-dash-src="${src}"]`)) return resolve();const s=doc.createElement('script');s.src=src;s.dataset.dashSrc=src;s.onload=resolve;s.onerror=reject;doc.body.appendChild(s);});}
+  async function injectCompletedModules(){
+    if(injected) return;
+    const doc=frame.contentDocument;if(!doc) return;
+    try{await addScript(doc,'/static/market-reference.js');await addScript(doc,'/static/market-knn.js');injected=true;toast('Market Reference dan Robust Spatial KNN dimuat ke workspace.');}
+    catch(e){console.error(e);toast('Core workspace aktif, tetapi modul Market/KNN gagal dimuat.');}
+  }
+  async function focusInsideFrame(target){
+    await injectCompletedModules();
+    const tryFocus=()=>{const doc=frame.contentDocument;if(!doc)return;let el=null;if(target==='market')el=doc.getElementById('marketReferencePanel');if(target==='knn')el=doc.getElementById('marketKnnStatus')||doc.getElementById('marketReferencePanel');if(target==='siteplan')el=doc.querySelector('.map-wrap');el?.scrollIntoView({behavior:'smooth',block:'start'});};
+    setTimeout(tryFocus,350);setTimeout(tryFocus,1100);
+  }
+  function text(id,fallback='—'){try{return frame.contentDocument?.getElementById(id)?.textContent?.trim()||fallback}catch{return fallback}}
+  function sync(){
+    $('kpiEfficiency').textContent=text('efficiency');$('kpiStandard').textContent=text('standardLotCount');$('kpiAdaptive').textContent=text('adaptiveLotCount');$('kpiKnn').textContent=text('knnRecommendedPrice');
+    const badge=text('marketDataBadge','loading…');$('kpiMarket').textContent=badge;
+    const api=text('apiBadge','API menunggu workspace');$('apiMirror').textContent=api;$('apiMirror').style.background=/ok|online|ready|aktif|2\.5/i.test(api)?'#ecfdf3':'#f2f4f7';
+  }
+  frame.addEventListener('load',async()=>{await injectCompletedModules();sync();setInterval(sync,800)});
+  navButtons.forEach(b=>b.addEventListener('click',()=>b.dataset.view==='dashboard'?showDashboard():showWorkspace(b.dataset.view)));
+  document.querySelectorAll('[data-planned]').forEach(b=>b.addEventListener('click',()=>toast(`${b.dataset.planned}: belum ada engine di repository. Tidak ditandai selesai.`)));
+  $('openWorkspaceBtn').addEventListener('click',()=>showWorkspace('siteplan'));$('backDashboardBtn').addEventListener('click',showDashboard);$('refreshBtn').addEventListener('click',()=>{sync();toast('Status dashboard diperbarui dari workspace.');});
+  setInterval(sync,1200);
+})();
+</script>
 </body>
 </html>
